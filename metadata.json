@@ -1,0 +1,6 @@
+{
+  "name": "Reloop — College Second-Hand Bidding Marketplace",
+  "description": "Local college second-hand bidding marketplace for textbooks, electronics, lab kits, and campus essentials.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
