@@ -442,7 +442,7 @@ export default function CheckoutPage({ transactionId, onBack, onComplete, onNavi
               </div>
             </div>
 
-            {/* Action Buttons */}
+              {/* Action Buttons */}
             {isAlreadyPaid ? (
               <div className="space-y-3 pt-2">
                 <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-center space-y-1">
@@ -463,7 +463,7 @@ export default function CheckoutPage({ transactionId, onBack, onComplete, onNavi
               </div>
             ) : (
               <div className="space-y-3 pt-2">
-                {/* One click simulate success */}
+                {/* Simulate success */}
                 <button
                   type="button"
                   onClick={() => handleSimulatePayment('success')}
@@ -483,7 +483,7 @@ export default function CheckoutPage({ transactionId, onBack, onComplete, onNavi
                   )}
                 </button>
 
-                {/* Simulate failure button to test retry */}
+                {/* Simulate failure */}
                 <button
                   type="button"
                   onClick={() => handleSimulatePayment('failure')}
@@ -494,12 +494,39 @@ export default function CheckoutPage({ transactionId, onBack, onComplete, onNavi
                   Simulate Payment Failure (Test Retry)
                 </button>
 
-                <p className="text-[11px] text-slate-400 text-center leading-tight">
+                {/* NEW: Cancel Reservation Button */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (window.confirm("Are you sure you want to cancel this reservation? The seller will be able to offer the item to another bidder.")) {
+                      setProcessing(true);
+                      try {
+                        if (isMockMode) {
+                          // If you have a mock API function for this:
+                          await mockApi.cancelReservation(transaction.id, currentUser); 
+                        } else {
+                          await api.transactions.cancel(transaction.id);
+                        }
+                        onNavigate('my-bids'); // Redirect back to bids
+                      } catch (err) {
+                        alert(err.message || "Failed to cancel reservation.");
+                      } finally {
+                        setProcessing(false);
+                      }
+                    }
+                  }}
+                  disabled={processing}
+                  className="w-full py-2.5 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-xs rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                >
+                  Cancel Reservation & Release Item
+                </button>
+
+                <p className="text-[11px] text-slate-400 text-center leading-tight pt-2">
                   Clicking will invoke the simulated payment pipeline, updating order status in real time.
                 </p>
               </div>
             )}
-          </div>
+           </div>
         </div>
       </div>
     </div>

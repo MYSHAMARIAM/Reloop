@@ -35,16 +35,17 @@ export default function ListingDetailPage({
 
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(null);          // action errors (shown as a banner)
+  const [loadError, setLoadError] = useState(null);  // page failed to load (full-page error)
   const [actionSuccess, setActionSuccess] = useState(null);
   const [showBidModal, setShowBidModal] = useState(false);
   const [processingSelection, setProcessingSelection] = useState(false);
   const [confirmModalBid, setConfirmModalBid] = useState(null);
 
-  const fetchDetail = async () => {
+  const fetchDetail = async (showSpinner = false, silent = false) => {
     try {
-      setLoading(true);
-      setError(null);
+      if (showSpinner) setLoading(true);
+      setLoadError(null);
       let data;
       if (isMockMode) {
         data = await mockApi.getListingById(listingId);
@@ -52,32 +53,57 @@ export default function ListingDetailPage({
         data = await api.listings.getById(listingId);
       }
       setListing(data);
-    } catch (err) {
-      setError(err.message || 'Failed to load listing details');
-    } finally {
-      setLoading(false);
+      } catch (err) {
+        if (!silent) {
+          setLoadError(err.message || 'Failed to load listing details');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+
+
+// Initial fetch
+useEffect(() => {
+  fetchDetail(true);
+}, [listingId, isMockMode, currentUser?.id]);
+
+// Auto-refresh every 15 seconds
+useEffect(() => {
+  if (isMockMode) return;
+
+  const timer = setInterval(() => {
+    if (!document.hidden && !processingSelection) {
+      fetchDetail(false, true);
     }
-  };
+  }, 15000);
 
-  useEffect(() => {
-    fetchDetail();
-  }, [listingId, isMockMode]);
+  return () => clearInterval(timer);
+}, [listingId, isMockMode, processingSelection, currentUser?.id]);
 
-  if (loading) {
-    return (
-      <div className="py-20 text-center space-y-3">
-        <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="text-xs text-slate-500 font-medium">Loading auction details...</p>
-      </div>
-    );
-  }
+// Loading state
+if (loading) {
+  return (
+    <div className="py-20 text-center space-y-3">
+      <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto" />
+      <p className="text-xs text-slate-500 font-medium">
+        Loading auction details...
+      </p>
+    </div>
+  );
+}
 
-  if (error || !listing) {
+// Keep your existing error handling below this
+
+
+
+  if (loadError || !listing) {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-4 max-w-lg mx-auto">
         <AlertCircle className="w-10 h-10 text-rose-500 mx-auto" />
         <h3 className="font-bold text-slate-900">Unable to load auction</h3>
-        <p className="text-xs text-slate-500">{error || 'Listing not found.'}</p>
+        <p className="text-xs text-slate-500">{loadError || 'Listing not found.'}</p>
         <button
           onClick={onBack}
           className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-semibold"
@@ -97,8 +123,38 @@ export default function ListingDetailPage({
     listing.min_increment_rupees
   );
 
-  // Check if current user has a pending selection offer
-  const myPendingSelection = listing.active_selection && currentUser && listing.active_selection.selected_bidder_id === currentUser.id;
+  // A selection offer is waiting for the selected bidder's answer
+  const hasPendingSelection =
+    !!listing.active_selection && listing.active_selection.status === 'pending';
+
+  // Seller may pick a bidder any time until the item is reserved/sold (timer or not)
+  const sellerCanSelect =
+    !!isSeller && listing.status !== 'sold' && listing.status !== 'reserved' && listing.status !== 'withdrawn';
+
+  // Is the CURRENT USER the selected bidder? String() avoids "5" vs 5 mismatches.
+  const myPendingSelection =
+    !!currentUser &&
+    hasPendingSelection &&
+    String(listing.active_selection.selected_bidder_id) === String(currentUser.id);
+
+  const hasBuyNow = !!listing.buy_now_price_paise;
+
+  const handleBuyNow = async () => {
+    if (!currentUser) return onOpenAuth('login');
+    setProcessingSelection(true);
+    setActionSuccess(null);
+    setError(null);
+    try {
+      const tx = isMockMode
+        ? await mockApi.buyNow(listing.id, currentUser)
+        : await api.listings.buyNow(listing.id);
+      onNavigate('checkout', tx.id);
+    } catch (err) {
+      setError(err.message || 'Buy Now failed');
+    } finally {
+      setProcessingSelection(false);
+    }
+  };
 
   // Handle seller selecting a bidder
   const handleSelectBidder = async (bidId) => {
@@ -135,11 +191,13 @@ export default function ListingDetailPage({
         res = await api.bids.respondToSelection(listing.active_selection.id, action);
       }
       setActionSuccess(res?.message || `Offer ${action}ed.`);
-      await fetchDetail();
 
-      if (action === 'accept' && onNavigate) {
-        const txId = listing.transaction?.id || listing.id;
+      // Use the transaction id returned by the API (the local `listing` is stale here)
+      const txId = res?.transaction_id || res?.transaction?.id;
+      if (action === 'accept' && txId && onNavigate) {
         onNavigate('checkout', txId);
+      } else {
+        await fetchDetail();
       }
     } catch (err) {
       setError(err.message || `Failed to ${action} offer`);
@@ -289,7 +347,7 @@ export default function ListingDetailPage({
                       <th className="pb-3">Bidder</th>
                       <th className="pb-3">Amount</th>
                       <th className="pb-3">Time</th>
-                      {isSeller && isAuctionEnded && <th className="pb-3 text-right">Seller Action</th>}
+                      {sellerCanSelect && <th className="pb-3 text-right">Seller Action</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -312,7 +370,7 @@ export default function ListingDetailPage({
                         <td className="py-3 text-slate-400">
                           {formatDateTime(b.created_at)}
                         </td>
-                        {isSeller && isAuctionEnded && (
+                        {sellerCanSelect && (
                           <td className="py-3 text-right">
                             {listing.status === 'reserved' || listing.status === 'sold' ? (
                               <span className="text-[11px] text-slate-400">Item Reserved</span>
@@ -343,8 +401,8 @@ export default function ListingDetailPage({
 
         {/* Right Column: Bidding Controls & Selection/Handover Status Cards */}
         <div className="space-y-6">
-          {/* Action Box: Active Bidding */}
-          {!isAuctionEnded && (
+          {/* Action Box: Bidding + optional Buy Now */}
+          {!isAuctionEnded && !hasPendingSelection && (
             <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-6 sticky top-24">
               <div>
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
@@ -359,7 +417,7 @@ export default function ListingDetailPage({
 
               {/* Countdown timer pill */}
               <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
-                <span className="text-xs text-slate-500 font-medium">Bidding Deadline</span>
+                <span className="text-xs text-slate-500 font-medium">Auction Ends</span>
                 <CountdownTimer endsAt={listing.ends_at} status={listing.status} />
               </div>
 
@@ -382,7 +440,7 @@ export default function ListingDetailPage({
               {/* Action Button */}
               {isSeller ? (
                 <div className="p-3 bg-slate-100 text-slate-600 text-xs rounded-xl text-center font-medium">
-                  You are the seller of this item. Self-bidding is prohibited.
+                  You are the seller of this item. Sellers cannot bid on their own items.
                 </div>
               ) : (
                 <button
@@ -398,45 +456,70 @@ export default function ListingDetailPage({
               )}
 
               <p className="text-[11px] text-slate-400 text-center leading-normal">
-                Winning bidder is explicitly selected by the seller after bidding closes.
+                The seller may accept any bid early, before the timer ends.
               </p>
+
+              {hasBuyNow && !isSeller && (
+                <div className="space-y-3 pt-4 border-t border-slate-100">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Buy Now Price</span>
+                    <span className="text-xl font-black text-slate-900">
+                      {formatRupees(listing.buy_now_price_rupees ?? listing.buy_now_price_paise / 100)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleBuyNow}
+                    disabled={processingSelection}
+                    className="w-full py-3 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    Buy Now Instantly
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Invitation Box for Selected Bidder */}
+          {/* Other visitors: explain why bidding is paused */}
+          {hasPendingSelection && !myPendingSelection && !isSeller && (
+            <div className="bg-amber-50 border border-amber-200 rounded-3xl p-5 text-xs text-amber-900">
+              The seller has selected a bidder and is waiting for their response. Bids and Buy Now are paused until they answer.
+            </div>
+          )}
+
+            {/* Invitation Box for Selected Bidder */}
           {myPendingSelection && (
-            <div className="bg-amber-500/10 border-2 border-amber-500 rounded-3xl p-6 shadow-md space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="bg-emerald-500/10 border-2 border-emerald-500 rounded-3xl p-6 shadow-md space-y-4 animate-in zoom-in-95 duration-200">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-amber-500 text-white flex items-center justify-center font-bold">
-                  ★
+                <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold">
+                  <CheckCircle className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="font-extrabold text-slate-900 text-base">
                     You've Been Selected!
                   </h3>
-                  <p className="text-xs text-amber-900 font-medium">
+                  <p className="text-xs text-emerald-900 font-medium">
                     The seller has selected your bid of {formatRupees(listing.active_selection.bid_amount_rupees)}.
                   </p>
                 </div>
               </div>
 
-              <p className="text-xs text-slate-700 leading-relaxed bg-white/70 p-3 rounded-xl border border-amber-200">
-                You can now choose to accept or decline. If accepted, the item will be reserved and you can arrange the campus meetup for handover.
+              <p className="text-xs text-slate-700 leading-relaxed bg-white/70 p-3 rounded-xl border border-emerald-200">
+                Accept to reserve this item and continue to checkout, or decline to let the seller choose someone else. This offer expires in 24 hours.
               </p>
 
               <div className="flex gap-2">
                 <button
                   onClick={() => handleRespondToSelection('accept')}
                   disabled={processingSelection}
-                  className="flex-1 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
                   <Check className="w-4 h-4" />
-                  Accept Offer
+                  Accept & Proceed to Checkout
                 </button>
                 <button
                   onClick={() => handleRespondToSelection('decline')}
                   disabled={processingSelection}
-                  className="py-2.5 px-4 text-xs font-bold text-rose-700 bg-rose-100 hover:bg-rose-200 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  className="py-2.5 px-4 text-xs font-bold text-rose-700 bg-rose-100 hover:bg-rose-200 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
                   <XCircle className="w-4 h-4" />
                   Decline
@@ -446,7 +529,7 @@ export default function ListingDetailPage({
           )}
 
           {/* Seller Selection Management Panel when bidding ended */}
-          {isAuctionEnded && isSeller && listing.status !== 'sold' && listing.status !== 'reserved' && (
+          {sellerCanSelect && (
             <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-xl space-y-4">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-emerald-400" />
@@ -454,7 +537,7 @@ export default function ListingDetailPage({
               </div>
 
               <p className="text-xs text-slate-300 leading-relaxed">
-                Bidding is concluded. You have total autonomy to select <strong>any bidder</strong> from the table on the left. The highest bidder is not automatically chosen.
+                {isAuctionEnded ? 'This auction has ended.' : 'This auction is still open, but you can accept any bid right now.'} You can select <strong>any bidder</strong> from the table on the left. The highest bidder is not automatically chosen.
               </p>
 
               {listing.active_selection && listing.active_selection.status === 'pending' ? (

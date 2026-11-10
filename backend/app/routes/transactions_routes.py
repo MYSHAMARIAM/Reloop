@@ -155,3 +155,45 @@ def confirm_handover_completion(
 ):
     tx = confirm_handover(db, transaction_id, current_user)
     return format_transaction_response(tx)
+
+@router.post("/{transaction_id}/cancel", response_model=TransactionResponse, dependencies=[Depends(verify_csrf)])
+def cancel_reservation(
+    transaction_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    tx = get_authorized_transaction(db, transaction_id, current_user)
+    
+    # 1. Prevent cancelling a finalized sale
+    if tx.status == "completed" or tx.payment_status == "paid_demo":
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot cancel a reservation that has already been paid or completed."
+        )
+        
+    # 2. Only the buyer can cancel their own checkout
+    if current_user.id != tx.buyer_id:
+        raise HTTPException(
+            status_code=403, 
+            detail="Only the selected buyer can cancel this reservation."
+        )
+
+    # 3. Prevent cancelling if it's already cancelled
+    if tx.status == "cancelled":
+        raise HTTPException(status_code=400, detail="This transaction is already cancelled.")
+
+    # 4. Cancel the transaction
+    tx.status = "cancelled"
+    tx.fulfilment_status = "cancelled"
+    
+    # 5. Release the listing back to the seller
+    listing = db.query(Listing).filter(Listing.id == tx.listing_id).first()
+    if listing and listing.status in ("reserved", "sold"):
+        from app.services.auction_service import now_utc
+        listing.status = "active" if listing.ends_at > now_utc() else "bidding_ended"
+        
+    add_event(db, tx, "Buyer cancelled the reservation. Item released back to seller.")
+    db.commit()
+    db.refresh(tx)
+    
+    return format_transaction_response(tx)

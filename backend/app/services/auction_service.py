@@ -2,8 +2,36 @@ from datetime import datetime, timezone
 from typing import Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from app.models import Listing, Bid, BidderSelection, Transaction
+from app.models import Listing, Bid, BidderSelection, Transaction, TransactionEvent
 from app.schemas import ListingResponse, ListingDetailResponse, BidResponse, BidderSelectionResponse, TransactionResponse
+from datetime import datetime, timedelta
+
+def expire_stale_transactions(db: Session, listing: Listing):
+    """
+    Checks for unpaid transactions past their deadline and cancels them,
+    freeing the listing back to the seller.
+    """
+    now = now_utc()
+    tx = listing.transaction  # Using singular 'transaction'
+    
+    if tx and tx.status == "reserved" and tx.payment_status == "unpaid":
+        if tx.expires_at and tx.expires_at <= now:
+            tx.status = "cancelled"
+            tx.fulfilment_status = "cancelled"
+            
+            db.add(TransactionEvent(
+                transaction_id=tx.id, 
+                status="cancelled", 
+                message="Checkout window expired. Reservation automatically cancelled."
+            ))
+            
+            # Release the item: back to 'active' if the timer is still running,
+            # otherwise 'bidding_ended' so the seller can pick someone else
+            if listing.status in ("reserved", "sold"):
+                listing.status = "active" if listing.ends_at > now else "bidding_ended"
+            db.add(listing)
+            
+    db.commit()
 
 def now_utc() -> datetime:
     """Returns current UTC datetime without tzinfo for consistent SQLite storage."""
@@ -83,6 +111,9 @@ def format_listing_response(db: Session, listing: Listing) -> ListingResponse:
         current_highest_bid_rupees=highest_rupees,
         next_minimum_bid_paise=next_min_paise,
         next_minimum_bid_rupees=next_min_rupees,
+        buy_now_price_paise=listing.buy_now_price_paise,
+        buy_now_price_rupees=(listing.buy_now_price_paise / 100.0) if listing.buy_now_price_paise else None,
+        has_buy_now=bool(listing.buy_now_price_paise),
         bid_count=len(listing.bids),
         duration_hours=listing.duration_hours,
         image_url=listing.image_url,
@@ -92,7 +123,6 @@ def format_listing_response(db: Session, listing: Listing) -> ListingResponse:
         is_ended=is_ended,
         seconds_remaining=seconds_remaining,
     )
-
 def format_bid_response(bid: Bid) -> BidResponse:
     return BidResponse(
         id=bid.id,

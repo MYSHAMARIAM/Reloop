@@ -1,1 +1,329 @@
 @import "tailwindcss";
+
+/* Class-based dark mode: <html class="dark"> (toggled by ThemeProvider) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------- Typography: larger, easier to read ---------- */
+html { font-size: 17px; scroll-behavior: smooth; }
+body { -webkit-font-smoothing: antialiased; line-height: 1.55; }
+.text-xs { font-size: 0.8125rem; line-height: 1.25rem; }      /* was 12px  -> ~13.8px */
+.text-sm { font-size: 0.9375rem; line-height: 1.45rem; }      /* was 14px  -> ~16px   */
+.text-\[10px\] { font-size: 0.75rem; line-height: 1rem; }     /* was 10px  -> ~12.8px */
+.text-\[11px\] { font-size: 0.8125rem; line-height: 1.15rem; }/* was 11px  -> ~13.8px */
+
+.hide-scrollbar { scrollbar-width: none; }
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+
+@media (prefers-reduced-motion: no-preference) {
+  body, header, main, footer, .theme-fade { transition: background-color .25s ease, color .25s ease, border-color .25s ease; }
+}
+
+/* ------------------------------------------------------------------
+   PALETTE  (brand = emerald green; everything else is a matching,
+   green-tinted neutral so no box looks like a foreign grey/blue)
+   ------------------------------------------------------------------ */
+:root {
+  --color-slate-50: #f2f8f4;
+  --color-slate-100: #e7f0ea;
+  --color-slate-200: #d4e3d9;
+  --color-slate-300: #b6cdbd;
+  --color-slate-400: #7d9487;
+  --color-slate-500: #566b5f;
+  --color-slate-600: #42574b;
+  --color-slate-700: #2d4438;
+  --color-slate-800: #1a2f25;
+  --color-slate-900: #0f1f18;
+  --color-slate-950: #09140f;
+  --color-blue-50: #f0fdfa;
+  --color-blue-100: #ccfbf1;
+  --color-blue-200: #99f6e4;
+  --color-blue-300: #5eead4;
+  --color-blue-400: #2dd4bf;
+  --color-blue-500: #14b8a6;
+  --color-blue-600: #0d9488;
+  --color-blue-700: #0f766e;
+  --color-blue-800: #115e59;
+  --color-blue-900: #134e4a;
+  --color-blue-950: #042f2e;
+  --color-sky-50: #f0fdfa;
+  --color-sky-100: #ccfbf1;
+  --color-sky-200: #99f6e4;
+  --color-sky-300: #5eead4;
+  --color-sky-400: #2dd4bf;
+  --color-sky-500: #14b8a6;
+  --color-sky-600: #0d9488;
+  --color-sky-700: #0f766e;
+  --color-sky-800: #115e59;
+  --color-sky-900: #134e4a;
+  --color-sky-950: #042f2e;
+  --color-cyan-50: #f0fdfa;
+  --color-cyan-100: #ccfbf1;
+  --color-cyan-200: #99f6e4;
+  --color-cyan-300: #5eead4;
+  --color-cyan-400: #2dd4bf;
+  --color-cyan-500: #14b8a6;
+  --color-cyan-600: #0d9488;
+  --color-cyan-700: #0f766e;
+  --color-cyan-800: #115e59;
+  --color-cyan-900: #134e4a;
+  --color-cyan-950: #042f2e;
+  --color-indigo-50: #f0fdf4;
+  --color-indigo-100: #dcfce7;
+  --color-indigo-200: #bbf7d0;
+  --color-indigo-300: #86efac;
+  --color-indigo-400: #4ade80;
+  --color-indigo-500: #22c55e;
+  --color-indigo-600: #16a34a;
+  --color-indigo-700: #15803d;
+  --color-indigo-800: #166534;
+  --color-indigo-900: #14532d;
+  --color-indigo-950: #052e16;
+  --color-purple-50: #f7fee7;
+  --color-purple-100: #ecfccb;
+  --color-purple-200: #d9f99d;
+  --color-purple-300: #bef264;
+  --color-purple-400: #a3e635;
+  --color-purple-500: #84cc16;
+  --color-purple-600: #65a30d;
+  --color-purple-700: #4d7c0f;
+  --color-purple-800: #3f6212;
+  --color-purple-900: #365314;
+  --color-purple-950: #1a2e05;
+  --color-violet-50: #f7fee7;
+  --color-violet-100: #ecfccb;
+  --color-violet-200: #d9f99d;
+  --color-violet-300: #bef264;
+  --color-violet-400: #a3e635;
+  --color-violet-500: #84cc16;
+  --color-violet-600: #65a30d;
+  --color-violet-700: #4d7c0f;
+  --color-violet-800: #3f6212;
+  --color-violet-900: #365314;
+  --color-violet-950: #1a2e05;
+  --color-emerald-600: #058259;
+  --color-emerald-700: #046c4b;
+  --color-emerald-800: #065740;
+  --color-blue-600: #0f766e;
+  --color-blue-700: #115e59;
+}
+
+/* Light mode: keep small / helper text clearly readable */
+html:not(.dark) body { color: #1a2f25; }
+html:not(.dark) .text-slate-400 { color: #566b5f; }
+html:not(.dark) .text-emerald-600 { color: #047857; }
+html:not(.dark) .text-amber-600 { color: #b45309; }
+html:not(.dark) .placeholder\:text-slate-400::placeholder,
+html:not(.dark) input::placeholder, html:not(.dark) textarea::placeholder { color: #6b8074; }
+/* ...but text that sits on dark-by-design surfaces stays light */
+html:not(.dark) .hero-surface .text-slate-400,
+html:not(.dark) .bg-slate-900 .text-slate-400,
+html:not(.dark) .bg-slate-800 .text-slate-400,
+html:not(.dark) .bg-slate-900.text-slate-400 { color: #9db4a6; }
+html:not(.dark) .bg-slate-900 .text-slate-500,
+html:not(.dark) .bg-slate-800 .text-slate-500,
+html:not(.dark) .bg-slate-900.text-slate-500 { color: #97b0a1; }
+html:not(.dark) .hero-surface .text-emerald-600,
+html:not(.dark) .bg-slate-900 .text-emerald-600 { color: #34d399; }
+
+/* ------------------------------------------------------------------
+   DARK THEME: deep forest surfaces, soft mint text
+   page #09130f   cards #0f1c16   raised #162820
+   ------------------------------------------------------------------ */
+.dark {
+  color-scheme: dark;
+  --color-emerald-50: rgba(16,185,129,.10);
+  --color-emerald-100: rgba(16,185,129,.18);
+  --color-emerald-200: rgba(16,185,129,.32);
+  --color-amber-50: rgba(245,158,11,.10);
+  --color-amber-100: rgba(245,158,11,.18);
+  --color-amber-200: rgba(245,158,11,.32);
+  --color-rose-50: rgba(244,63,94,.10);
+  --color-rose-100: rgba(244,63,94,.18);
+  --color-rose-200: rgba(244,63,94,.32);
+  --color-orange-50: rgba(249,115,22,.10);
+  --color-orange-100: rgba(249,115,22,.18);
+  --color-orange-200: rgba(249,115,22,.32);
+  --color-blue-50: rgba(20,184,166,.10);
+  --color-blue-100: rgba(20,184,166,.18);
+  --color-blue-200: rgba(20,184,166,.32);
+  --color-sky-50: rgba(20,184,166,.10);
+  --color-sky-100: rgba(20,184,166,.18);
+  --color-sky-200: rgba(20,184,166,.32);
+  --color-cyan-50: rgba(20,184,166,.10);
+  --color-cyan-100: rgba(20,184,166,.18);
+  --color-cyan-200: rgba(20,184,166,.32);
+  --color-teal-50: rgba(20,184,166,.10);
+  --color-teal-100: rgba(20,184,166,.18);
+  --color-teal-200: rgba(20,184,166,.32);
+  --color-indigo-50: rgba(34,197,94,.10);
+  --color-indigo-100: rgba(34,197,94,.18);
+  --color-indigo-200: rgba(34,197,94,.32);
+  --color-purple-50: rgba(132,204,22,.10);
+  --color-purple-100: rgba(132,204,22,.18);
+  --color-purple-200: rgba(132,204,22,.32);
+  --color-violet-50: rgba(132,204,22,.10);
+  --color-violet-100: rgba(132,204,22,.18);
+  --color-violet-200: rgba(132,204,22,.32);
+}
+
+.dark body { background-color: #09130f; color: #e1efe6; }
+
+/* Surfaces */
+.dark .bg-white { background-color: #0f1c16; }
+.dark .bg-white\/95 { background-color: rgba(9,19,15,.92); }
+.dark .bg-slate-50 { background-color: #0b1712; }
+.dark .bg-slate-50\/50 { background-color: rgba(11,23,18,.55); }
+.dark .bg-slate-50\/60 { background-color: rgba(11,23,18,.6); }
+.dark .bg-slate-50\/70 { background-color: rgba(11,23,18,.7); }
+.dark .hover\:bg-slate-50\/50:hover, .dark .hover\:bg-slate-50\/60:hover { background-color: rgba(18,35,27,.8); }
+.dark .bg-white\/60 { background-color: rgba(15,28,22,.6); }
+.dark .bg-white\/70 { background-color: rgba(15,28,22,.7); }
+.dark .border-slate-200\/60 { border-color: rgba(35,64,52,.6); }
+.dark .bg-slate-100 { background-color: #162820; }
+.dark .bg-slate-200 { background-color: #1f372c; }
+.dark .hover\:bg-slate-50:hover { background-color: #12231b; }
+.dark .hover\:bg-slate-100:hover { background-color: #1b3026; }
+.dark .hover\:bg-slate-200:hover { background-color: #25402f; }
+.dark button.bg-slate-900 { background-color: #1f4a38; }
+.dark button.hover\:bg-slate-800:hover { background-color: #28604a; }
+
+/* Borders */
+.dark .border-slate-100 { border-color: #182b22; }
+.dark .border-slate-200 { border-color: #234034; }
+.dark .border-slate-300 { border-color: #2f5242; }
+.dark .divide-slate-100 > :not(:last-child) { border-color: #182b22; }
+.dark .divide-slate-200 > :not(:last-child) { border-color: #234034; }
+
+/* Text */
+.dark .text-slate-900 { color: #f0f8f3; }
+.dark .text-slate-800 { color: #e3f0e8; }
+.dark .text-slate-700 { color: #d0e3d7; }
+.dark .text-slate-600 { color: #b6cfc0; }
+.dark .text-slate-500 { color: #9bb8a8; }
+.dark .text-slate-400 { color: #86a393; }
+.dark .hover\:text-slate-900:hover { color: #ffffff; }
+.dark .hover\:text-slate-700:hover { color: #e3f0e8; }
+.dark .group:hover .group-hover\:text-emerald-700 { color: #6ee7b7; }
+
+/* Form controls */
+.dark input, .dark select, .dark textarea { color: #e3f0e8; }
+.dark input::placeholder, .dark textarea::placeholder { color: #7f9d8c; }
+.dark option { background-color: #0f1c16; color: #e3f0e8; }
+.dark img { filter: brightness(.95); }
+
+/* Accent text on tinted surfaces (dark mode) */
+.dark .text-emerald-600 { color: #34d399; }
+.dark .text-emerald-700 { color: #6ee7b7; }
+.dark .text-emerald-800 { color: #a7f3d0; }
+.dark .text-emerald-900 { color: #d1fae5; }
+.dark .hover\:text-emerald-700:hover { color: #a7f3d0; }
+.dark .hover\:text-emerald-800:hover { color: #d1fae5; }
+.dark .border-emerald-300 { border-color: rgba(16,185,129,.45); }
+.dark .text-emerald-50 { color: #d1fae5; }
+.dark .text-emerald-100 { color: #d1fae5; }
+.dark .text-emerald-200 { color: #a7f3d0; }
+.dark .text-amber-600 { color: #fbbf24; }
+.dark .text-amber-700 { color: #fcd34d; }
+.dark .text-amber-800 { color: #fde68a; }
+.dark .text-amber-900 { color: #fef3c7; }
+.dark .hover\:text-amber-700:hover { color: #fde68a; }
+.dark .hover\:text-amber-800:hover { color: #fef3c7; }
+.dark .border-amber-300 { border-color: rgba(245,158,11,.45); }
+.dark .text-amber-50 { color: #fef3c7; }
+.dark .text-amber-100 { color: #fef3c7; }
+.dark .text-amber-200 { color: #fde68a; }
+.dark .text-rose-600 { color: #fb7185; }
+.dark .text-rose-700 { color: #fda4af; }
+.dark .text-rose-800 { color: #fecdd3; }
+.dark .text-rose-900 { color: #ffe4e6; }
+.dark .hover\:text-rose-700:hover { color: #fecdd3; }
+.dark .hover\:text-rose-800:hover { color: #ffe4e6; }
+.dark .border-rose-300 { border-color: rgba(244,63,94,.45); }
+.dark .text-rose-50 { color: #ffe4e6; }
+.dark .text-rose-100 { color: #ffe4e6; }
+.dark .text-rose-200 { color: #fecdd3; }
+.dark .text-orange-600 { color: #fb923c; }
+.dark .text-orange-700 { color: #fdba74; }
+.dark .text-orange-800 { color: #fed7aa; }
+.dark .text-orange-900 { color: #ffedd5; }
+.dark .hover\:text-orange-700:hover { color: #fed7aa; }
+.dark .hover\:text-orange-800:hover { color: #ffedd5; }
+.dark .border-orange-300 { border-color: rgba(249,115,22,.45); }
+.dark .text-orange-50 { color: #ffedd5; }
+.dark .text-orange-100 { color: #ffedd5; }
+.dark .text-orange-200 { color: #fed7aa; }
+.dark .text-teal-600 { color: #2dd4bf; }
+.dark .text-teal-700 { color: #5eead4; }
+.dark .text-teal-800 { color: #99f6e4; }
+.dark .text-teal-900 { color: #ccfbf1; }
+.dark .hover\:text-teal-700:hover { color: #99f6e4; }
+.dark .hover\:text-teal-800:hover { color: #ccfbf1; }
+.dark .border-teal-300 { border-color: rgba(20,184,166,.45); }
+.dark .text-teal-50 { color: #ccfbf1; }
+.dark .text-teal-100 { color: #ccfbf1; }
+.dark .text-teal-200 { color: #99f6e4; }
+.dark .text-blue-600 { color: #2dd4bf; }
+.dark .text-blue-700 { color: #5eead4; }
+.dark .text-blue-800 { color: #99f6e4; }
+.dark .text-blue-900 { color: #ccfbf1; }
+.dark .hover\:text-blue-700:hover { color: #99f6e4; }
+.dark .hover\:text-blue-800:hover { color: #ccfbf1; }
+.dark .border-blue-300 { border-color: rgba(20,184,166,.45); }
+.dark .text-blue-50 { color: #ccfbf1; }
+.dark .text-blue-100 { color: #ccfbf1; }
+.dark .text-blue-200 { color: #99f6e4; }
+.dark .text-sky-600 { color: #2dd4bf; }
+.dark .text-sky-700 { color: #5eead4; }
+.dark .text-sky-800 { color: #99f6e4; }
+.dark .text-sky-900 { color: #ccfbf1; }
+.dark .hover\:text-sky-700:hover { color: #99f6e4; }
+.dark .hover\:text-sky-800:hover { color: #ccfbf1; }
+.dark .border-sky-300 { border-color: rgba(20,184,166,.45); }
+.dark .text-sky-50 { color: #ccfbf1; }
+.dark .text-sky-100 { color: #ccfbf1; }
+.dark .text-sky-200 { color: #99f6e4; }
+.dark .text-indigo-600 { color: #4ade80; }
+.dark .text-indigo-700 { color: #86efac; }
+.dark .text-indigo-800 { color: #bbf7d0; }
+.dark .text-indigo-900 { color: #dcfce7; }
+.dark .hover\:text-indigo-700:hover { color: #bbf7d0; }
+.dark .hover\:text-indigo-800:hover { color: #dcfce7; }
+.dark .border-indigo-300 { border-color: rgba(34,197,94,.45); }
+.dark .text-indigo-50 { color: #dcfce7; }
+.dark .text-indigo-100 { color: #dcfce7; }
+.dark .text-indigo-200 { color: #bbf7d0; }
+.dark .text-purple-600 { color: #a3e635; }
+.dark .text-purple-700 { color: #bef264; }
+.dark .text-purple-800 { color: #d9f99d; }
+.dark .text-purple-900 { color: #ecfccb; }
+.dark .hover\:text-purple-700:hover { color: #d9f99d; }
+.dark .hover\:text-purple-800:hover { color: #ecfccb; }
+.dark .border-purple-300 { border-color: rgba(132,204,22,.45); }
+.dark .text-purple-50 { color: #ecfccb; }
+.dark .text-purple-100 { color: #ecfccb; }
+.dark .text-purple-200 { color: #d9f99d; }
+.dark .text-violet-600 { color: #a3e635; }
+.dark .text-violet-700 { color: #bef264; }
+.dark .text-violet-800 { color: #d9f99d; }
+.dark .text-violet-900 { color: #ecfccb; }
+.dark .hover\:text-violet-700:hover { color: #d9f99d; }
+.dark .hover\:text-violet-800:hover { color: #ecfccb; }
+.dark .border-violet-300 { border-color: rgba(132,204,22,.45); }
+.dark .text-violet-50 { color: #ecfccb; }
+.dark .text-violet-100 { color: #ecfccb; }
+.dark .text-violet-200 { color: #d9f99d; }
+
+/* Hero + motion */
+.hero-surface {
+  background:
+    radial-gradient(60rem 30rem at 85% -10%, rgba(16,185,129,.30), transparent 60%),
+    radial-gradient(40rem 24rem at -10% 110%, rgba(20,184,166,.16), transparent 60%),
+    #0b1d16;
+}
+.dark .hero-surface { box-shadow: 0 0 0 1px rgba(110,231,183,.14), 0 24px 60px -24px rgba(0,0,0,.7); }
+
+@keyframes rl-float { 0%,100% { transform: translateY(0) rotate(var(--r,0deg)); } 50% { transform: translateY(-10px) rotate(var(--r,0deg)); } }
+@keyframes rl-fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.rl-float { animation: rl-float 7s ease-in-out infinite; }
+.rl-fade-up { animation: rl-fade-up .6s ease both; }
+@media (prefers-reduced-motion: reduce) { .rl-float, .rl-fade-up { animation: none; } }

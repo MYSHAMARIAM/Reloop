@@ -28,7 +28,7 @@ export default function PlaceBidModal({ listing, onClose, onBidSuccess, onOpenAu
           </div>
           <h3 className="text-lg font-bold text-slate-900">Sign in to Place Bids</h3>
           <p className="text-sm text-slate-600">
-            Only authenticated college students can participate in auction bidding.
+            Only verified college students can place bids on auctions.
           </p>
           <div className="flex gap-3 justify-center pt-2">
             <button
@@ -54,12 +54,19 @@ export default function PlaceBidModal({ listing, onClose, onBidSuccess, onOpenAu
 
   const isSeller = currentUser.id === listing.seller_id;
 
+  {/* Add this disclaimer just above the Submit button */}
+<div className="bg-amber-50 border border-amber-200 p-3 rounded-xl mb-4">
+  <p className="text-[11px] text-amber-800 leading-tight">
+    <strong>Note:</strong> Submitting the highest bid does not guarantee you will win. The seller has the final authority to select any eligible bidder after the auction ends.
+  </p>
+</div>
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
 
     if (isSeller) {
-      setError('Sellers are prohibited from bidding on their own listings.');
+      setError('Sellers cannot place bids on their own listings.');
       return;
     }
 
@@ -109,8 +116,8 @@ export default function PlaceBidModal({ listing, onClose, onBidSuccess, onOpenAu
           <div className="p-3 mb-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-800">
             <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <div>
-              <strong>Self-Bidding Restriction:</strong> You created this listing.
-              College marketplace ethics prohibit sellers from bidding on their own items.
+              <strong>Seller restriction:</strong> You created this listing.
+              College marketplace ethics prohibit sellers from placing bids on their own items.
             </div>
           </div>
         )}

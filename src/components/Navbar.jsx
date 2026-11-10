@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import ThemeToggle from './ThemeToggle';
+import LiveClock from './LiveClock';
 import {
   Menu,
   X,
-  Search,
   PlusCircle,
   Gavel,
   Package,
-  Layers,
   LayoutDashboard,
   Handshake,
   User,
@@ -16,18 +16,9 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-export default function Navbar({ onNavigate, currentPage, onOpenAuth, onSearch }) {
+export default function Navbar({ onNavigate, currentPage, onOpenAuth }) {
   const { currentUser, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    if (onSearch) {
-      onSearch(searchQuery);
-    }
-    onNavigate('browse');
-  };
 
   const navItem = (pageKey, label, icon) => {
     const isActive = currentPage === pageKey;
@@ -38,7 +29,7 @@ export default function Navbar({ onNavigate, currentPage, onOpenAuth, onSearch }
           onNavigate(pageKey);
           setMobileMenuOpen(false);
         }}
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors cursor-pointer ${
           isActive
             ? 'bg-emerald-50 text-emerald-700'
             : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -54,6 +45,7 @@ export default function Navbar({ onNavigate, currentPage, onOpenAuth, onSearch }
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-4">
+          
           {/* Brand Logo */}
           <div className="flex items-center gap-6">
             <button
@@ -68,46 +60,40 @@ export default function Navbar({ onNavigate, currentPage, onOpenAuth, onSearch }
                   Reloop
                 </span>
                 <span className="block text-[10px] uppercase tracking-wider font-semibold text-emerald-600 -mt-1">
-                  College Bids
+                  Campus Auctions
                 </span>
               </div>
             </button>
-
-            {/* Desktop Navigation Links */}
-            <nav className="hidden lg:flex items-center gap-1">
-              {navItem('browse', 'Browse Auctions', Gavel)}
-              {navItem('sell', 'Sell an Item', PlusCircle)}
-            </nav>
           </div>
 
-          {/* Search Bar */}
-          <form
-            onSubmit={handleSearchSubmit}
-            className="hidden md:flex flex-1 max-w-md items-center relative"
-          >
-            <Search className="w-4 h-4 absolute left-3.5 text-slate-400 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search textbooks, calculators, Arduino, sensors..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-slate-800 placeholder-slate-400"
-            />
-          </form>
+          {/* Desktop Navigation Links - REORDERED */}
+          <nav className="hidden xl:flex flex-1 items-center justify-center gap-1">
+            {currentUser ? (
+              <>
+                {navItem('seller-dashboard', 'Dashboard', LayoutDashboard)}
+                {navItem('sell', 'Sell an Item', PlusCircle)}
+                {navItem('my-listings', 'My Listings', Package)}
+                {navItem('browse', 'Browse Auctions', Gavel)}
+                {navItem('transactions', 'Orders & Handover', Handshake)}
+              </>
+            ) : (
+              <>
+                {navItem('browse', 'Browse Auctions', Gavel)}
+                {navItem('sell', 'Sell an Item', PlusCircle)}
+              </>
+            )}
+          </nav>
 
           {/* User Status & Action Buttons */}
-          <div className="hidden lg:flex items-center gap-2">
+          <div className="hidden xl:flex items-center justify-end gap-2 min-w-[150px]">
+            <div className="hidden 2xl:block mr-1"><LiveClock /></div>
+            <ThemeToggle />
             {currentUser ? (
               <div className="flex items-center gap-1.5">
-                {navItem('my-bids', 'My Bids', Gavel)}
-                {navItem('my-listings', 'My Listings', Package)}
-                {navItem('seller-dashboard', 'Dashboard', LayoutDashboard)}
-                {navItem('transactions', 'Orders & Handover', Handshake)}
-                
                 {/* Profile Pill */}
                 <button
                   onClick={() => onNavigate('profile')}
-                  className={`flex items-center gap-2 pl-2 pr-3 py-1.5 ml-1 rounded-full border text-xs font-semibold cursor-pointer transition-colors ${
+                  className={`flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full border text-xs font-semibold cursor-pointer transition-colors ${
                     currentPage === 'profile'
                       ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
                       : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
@@ -115,10 +101,9 @@ export default function Navbar({ onNavigate, currentPage, onOpenAuth, onSearch }
                   title={currentUser.email}
                 >
                   <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">
-                    {currentUser.display_name.charAt(0).toUpperCase()}
+                    {(currentUser.display_name || currentUser.email || '?').charAt(0).toUpperCase()}
                   </div>
-                  <span className="truncate max-w-[120px]">{currentUser.display_name}</span>
-                </button>
+                    <span className="truncate max-w-[120px]">{currentUser.display_name || currentUser.email}</span>                </button>
 
                 <button
                   onClick={logout}
@@ -147,14 +132,8 @@ export default function Navbar({ onNavigate, currentPage, onOpenAuth, onSearch }
           </div>
 
           {/* Mobile Hamburger Button */}
-          <div className="flex lg:hidden items-center gap-2">
-            <button
-              onClick={() => onNavigate('sell')}
-              className="p-2 text-emerald-700 bg-emerald-50 rounded-lg"
-              title="Sell an Item"
-            >
-              <PlusCircle className="w-5 h-5" />
-            </button>
+          <div className="flex xl:hidden items-center gap-1">
+            <ThemeToggle />
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100"
@@ -168,19 +147,10 @@ export default function Navbar({ onNavigate, currentPage, onOpenAuth, onSearch }
 
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
-        <div className="lg:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-3 shadow-xl animate-in slide-in-from-top duration-200">
-          <form onSubmit={handleSearchSubmit} className="relative mb-2">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search items..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            />
-          </form>
-
+        <div className="xl:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-3 shadow-xl animate-in slide-in-from-top duration-200">
+          
           <div className="space-y-1">
+            <LiveClock variant="inline" className="px-3 pb-2 text-xs font-medium text-slate-500" />
             {navItem('home', 'Home', RefreshCw)}
             {navItem('browse', 'Browse Auctions', Gavel)}
             {navItem('sell', 'Sell an Item', PlusCircle)}
@@ -192,10 +162,9 @@ export default function Navbar({ onNavigate, currentPage, onOpenAuth, onSearch }
                     My Account ({currentUser.display_name})
                   </p>
                 </div>
+                {navItem('seller-dashboard', 'Dashboard', LayoutDashboard)}
                 {navItem('my-listings', 'My Listings', Package)}
-                {navItem('my-bids', 'My Bids', Gavel)}
-                {navItem('seller-dashboard', 'Seller Dashboard', LayoutDashboard)}
-                {navItem('transactions', 'My Transactions & Handover', Handshake)}
+                {navItem('transactions', 'Orders & Handover', Handshake)}
                 {navItem('profile', 'My Profile', User)}
                 
                 <button

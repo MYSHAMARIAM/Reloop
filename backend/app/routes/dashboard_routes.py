@@ -149,9 +149,28 @@ def get_seller_dashboard(
         else:
             unsold.append(formatted)
 
+    # Live bid activity across ALL of this seller's auctions (newest first)
+    listing_ids = [l.id for l in listings]
+    title_by_id = {l.id: l.title for l in listings}
+    total_bids = 0
+    recent_bids = []
+    if listing_ids:
+        bid_query = db.query(Bid).filter(Bid.listing_id.in_(listing_ids))
+        total_bids = bid_query.count()
+        for b in bid_query.order_by(desc(Bid.created_at)).limit(8).all():
+            recent_bids.append({
+                "id": b.id,
+                "listing_id": b.listing_id,
+                "listing_title": title_by_id.get(b.listing_id, "Item"),
+                "bidder_name": b.bidder.display_name if b.bidder else "Student",
+                "amount_rupees": b.amount_paise / 100.0,
+                "created_at": b.created_at,
+            })
+
     return {
         "summary": {
             "total_listings": len(listings),
+            "total_bids": total_bids,
             "active_count": len(active),
             "awaiting_decision_count": len(awaiting_decision),
             "pending_response_count": len(pending_response),
@@ -165,6 +184,7 @@ def get_seller_dashboard(
         "reserved_items": reserved,
         "completed_sales": completed,
         "unsold_auctions": unsold,
+        "recent_bids": recent_bids,
     }
 
 

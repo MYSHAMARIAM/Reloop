@@ -3,12 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Reloop — College Second-Hand Bidding Marketplace</title>
-    <meta name="description" content="Local college second-hand bidding marketplace for textbooks, electronics, lab kits, and campus essentials." />
-    <meta property="og:title" content="Reloop — College Second-Hand Bidding Marketplace" />
-    <meta property="og:description" content="Local college second-hand bidding marketplace for textbooks, electronics, lab kits, and campus essentials." />
+    <title>Reloop — Campus Auction House</title>
+    <meta name="description" content="The campus auction house for pre-owned textbooks, electronics, lab kits, and everyday essentials, with safe in-person handovers." />
+    <meta property="og:title" content="Reloop — Campus Auction House" />
+    <meta property="og:description" content="The campus auction house for pre-owned textbooks, electronics, lab kits, and everyday essentials, with safe in-person handovers." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      // Apply the saved theme before first paint to avoid a light flash in dark mode.
+      (function () {
+        try {
+          var t = localStorage.getItem('reloop_theme');
+          if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'dark';
+          if (t === 'dark') { document.documentElement.classList.add('dark'); document.documentElement.style.colorScheme = 'dark'; }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -21,6 +21,7 @@ from app.services.bidding_service import (
 from app.services.auction_service import (
     format_bid_response,
     format_selection_response,
+    format_transaction_response,
 )
 
 router = APIRouter(tags=["Bids & Selection"])
@@ -83,8 +84,10 @@ def bidder_respond_to_selection(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    selection, message = respond_to_selection(db, selection_id, current_user, data.action)
+    selection, message, tx = respond_to_selection(db, selection_id, current_user, data.action)
     return {
         "message": message,
         "selection": format_selection_response(selection),
+        "transaction_id": tx.id if tx else None,
+        "transaction": format_transaction_response(tx).model_dump(mode="json") if tx else None,
     }

@@ -60,7 +60,7 @@ export default function MyListingsPage({ onNavigate, onSelectListing, onOpenAuth
       <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center max-w-md mx-auto space-y-4 shadow-sm my-12">
         <Package className="w-12 h-12 text-slate-300 mx-auto" />
         <h2 className="text-xl font-bold text-slate-900">Sign In to View Listings</h2>
-        <p className="text-xs text-slate-500">View and manage items you've put up for bidding.</p>
+        <p className="text-xs text-slate-500">View and manage items you've put up for auction.</p>
         <button
           onClick={() => onOpenAuth('login')}
           className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
@@ -79,7 +79,7 @@ export default function MyListingsPage({ onNavigate, onSelectListing, onOpenAuth
             My Created Listings
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Manage your pre-owned college items and track bidding activity
+            Manage your pre-owned college items and track auction activity
           </p>
         </div>
 
@@ -106,7 +106,7 @@ export default function MyListingsPage({ onNavigate, onSelectListing, onOpenAuth
           <Package className="w-12 h-12 mx-auto text-slate-300" />
           <h3 className="font-bold text-slate-800">You haven't listed any items yet</h3>
           <p className="text-xs text-slate-400">
-            Have old textbooks, an extra calculator, or spare sensors? Put them up for bidding.
+            Have old textbooks, an extra calculator, or spare sensors? Put them up for auction.
           </p>
           <button
             onClick={() => onNavigate('sell')}

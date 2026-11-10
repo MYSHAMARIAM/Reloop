@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { MockDataProvider, useMockData } from './context/MockDataContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { api } from './api';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import MockBanner from './components/MockBanner';
 import AuthModal from './components/AuthModal';
 import PlaceBidModal from './components/PlaceBidModal';
+import BuyNowModal from './components/BuyNowModal';
 
 // Pages
 import HomePage from './pages/HomePage';
@@ -19,6 +21,7 @@ import SellerDashboardPage from './pages/SellerDashboardPage';
 import MyTransactionsPage from './pages/MyTransactionsPage';
 import CheckoutPage from './pages/CheckoutPage';
 import ProfilePage from './pages/ProfilePage';
+import OfferBanner from './components/OfferBanner';
 
 function MainApp() {
   const { isMockMode } = useAuth();
@@ -33,26 +36,44 @@ function MainApp() {
   // Global modals
   const [authModalTab, setAuthModalTab] = useState(null); // 'login', 'register', or null
   const [quickBidListing, setQuickBidListing] = useState(null);
+  const [quickBuyListing, setQuickBuyListing] = useState(null);
 
   // Real or mock listings state
   const [liveListings, setLiveListings] = useState([]);
   const [loadingListings, setLoadingListings] = useState(false);
 
-  const fetchListings = async () => {
+  const fetchListings = async ({ silent = false } = {}) => {
     if (isMockMode) return;
     try {
-      setLoadingListings(true);
+      if (!silent) setLoadingListings(true);
       const data = await api.listings.getAll({ status_filter: 'all' });
       setLiveListings(data);
     } catch (err) {
       console.warn('FastAPI backend not reachable, using empty live list:', err.message);
     } finally {
-      setLoadingListings(false);
+      if (!silent) setLoadingListings(false);
     }
   };
 
   useEffect(() => {
     fetchListings();
+  }, [isMockMode]);
+
+  // Keep prices, bid counts and live-auction numbers current without a page refresh:
+  // poll every 10s while the tab is visible, and refresh as soon as the tab is re-opened.
+  useEffect(() => {
+    if (isMockMode) return;
+    const refresh = () => {
+      if (!document.hidden) fetchListings({ silent: true });
+    };
+    const timer = setInterval(refresh, 10000);
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+    };
   }, [isMockMode]);
 
   const currentListings = isMockMode ? mockListings : liveListings;
@@ -86,6 +107,7 @@ function MainApp() {
           navigateTo('browse');
         }}
       />
+            <OfferBanner onViewOffer={handleSelectListing} refreshKey={currentPage} />
 
       {/* Main Page Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8">
@@ -95,6 +117,7 @@ function MainApp() {
             onSelectListing={handleSelectListing}
             onNavigate={navigateTo}
             onQuickBid={(listing) => setQuickBidListing(listing)}
+            onBuyNow={(listing) => setQuickBuyListing(listing)}
             onFilterCategory={(catId) => {
               setSelectedCategory(catId);
               navigateTo('browse');
@@ -107,6 +130,7 @@ function MainApp() {
             listings={currentListings}
             onSelectListing={handleSelectListing}
             onQuickBid={(listing) => setQuickBidListing(listing)}
+            onBuyNow={(listing) => setQuickBuyListing(listing)}
             initialCategory={selectedCategory}
             initialSearchQuery={searchQuery}
           />
@@ -191,6 +215,20 @@ function MainApp() {
         />
       )}
 
+      {/* Global Buy Now confirmation */}
+      {quickBuyListing && (
+        <BuyNowModal
+          listing={quickBuyListing}
+          onClose={() => setQuickBuyListing(null)}
+          onSuccess={(tx) => {
+            setQuickBuyListing(null);
+            fetchListings();
+            navigateTo('checkout', tx.id);
+          }}
+          onOpenAuth={(tab) => setAuthModalTab(tab)}
+        />
+      )}
+
       {/* Global Quick Place Bid Modal */}
       {quickBidListing && (
         <PlaceBidModal
@@ -208,10 +246,12 @@ function MainApp() {
 
 export default function App() {
   return (
-    <MockDataProvider>
-      <AuthProvider>
-        <MainApp />
-      </AuthProvider>
-    </MockDataProvider>
+    <ThemeProvider>
+      <MockDataProvider>
+        <AuthProvider>
+          <MainApp />
+        </AuthProvider>
+      </MockDataProvider>
+    </ThemeProvider>
   );
 }

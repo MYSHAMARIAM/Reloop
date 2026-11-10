@@ -23,7 +23,7 @@ def test_reject_self_bidding(client, test_seller):
         headers=seller_headers,
     )
     assert bid_resp.status_code == 400
-    assert "prohibited from bidding on their own" in bid_resp.json()["detail"]
+    assert "cannot place bids on their own" in bid_resp.json()["detail"]
 
 def test_valid_bids_and_minimum_increment_enforcement(client, test_seller, test_bidder1, test_bidder2):
     # 1. Seller creates listing: starting ₹500, min increment ₹50

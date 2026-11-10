@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import User
-from app.schemas import UserRegister, UserLogin, UserResponse, UserProfileUpdate
+from app.schemas import UserRegister, UserLogin, UserResponse, UserProfileUpdate, OTPVerifyRequest
 from app.auth import (
     hash_password,
     verify_password,
@@ -12,6 +12,7 @@ from app.auth import (
     verify_csrf,
 )
 from app.config import settings
+from app.services.otp_service import generate_otp, verify_otp
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -34,7 +35,7 @@ def set_auth_cookies(response: Response, user_id: int) -> str:
         key=settings.CSRF_COOKIE_NAME,
         value=csrf_token,
         max_age=settings.SESSION_MAX_AGE_SECONDS,
-        httponly=False,  # readable by frontend to send in X-CSRF-Token header
+        httponly=False,
         secure=settings.COOKIE_SECURE,
         samesite=settings.COOKIE_SAMESITE,
         path="/",
@@ -42,14 +43,12 @@ def set_auth_cookies(response: Response, user_id: int) -> str:
 
     return csrf_token
 
-
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(
     data: UserRegister,
     response: Response,
     db: Session = Depends(get_db),
 ):
-    # Check duplicate email
     existing = db.query(User).filter(User.email == data.email.lower()).first()
     if existing:
         raise HTTPException(
@@ -57,9 +56,7 @@ def register(
             detail="A user with this college email already exists.",
         )
 
-    # Hash with Argon2
     hashed = hash_password(data.password)
-
     user = User(
         email=data.email.lower(),
         display_name=data.display_name,
@@ -72,14 +69,14 @@ def register(
     db.commit()
     db.refresh(user)
 
+    # Registration logs the user in immediately (no OTP needed for registration)
     set_auth_cookies(response, user.id)
     return user
 
 
-@router.post("/login", response_model=UserResponse)
-def login(
+@router.post("/login")
+def login_step_1(
     data: UserLogin,
-    response: Response,
     db: Session = Depends(get_db),
 ):
     user = db.query(User).filter(User.email == data.email.lower()).first()
@@ -95,6 +92,31 @@ def login(
             detail="Your account has been deactivated.",
         )
 
+    # Generate OTP and "send" to terminal
+    generate_otp(user.email)
+    
+    # DO NOT set cookies yet! Return require_otp flag.
+    return {
+        "require_otp": True,
+        "email": user.email,
+        "message": "Password verified. OTP sent."
+    }
+
+
+@router.post("/verify-otp", response_model=UserResponse)
+def login_step_2(
+    data: OTPVerifyRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.email == data.email.lower()).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+        
+    if not verify_otp(data.email, data.code):
+        raise HTTPException(status_code=400, detail="Invalid or expired OTP code.")
+        
+    # OTP correct! Set cookies and return user
     set_auth_cookies(response, user.id)
     return user
 
@@ -105,11 +127,9 @@ def logout(response: Response, _user: User = Depends(get_current_user)):
     response.delete_cookie(key=settings.CSRF_COOKIE_NAME, path="/")
     return {"message": "Logged out successfully"}
 
-
 @router.get("/me", response_model=UserResponse)
 def get_current_profile(current_user: User = Depends(get_current_user)):
     return current_user
-
 
 @router.put("/me", response_model=UserResponse, dependencies=[Depends(verify_csrf)])
 def update_profile(
@@ -131,10 +151,8 @@ def update_profile(
     db.refresh(current_user)
     return current_user
 
-
 @router.get("/csrf")
 def get_csrf(response: Response):
-    """Provides a fresh CSRF token and sets the cookie if needed."""
     token = generate_csrf_token()
     response.set_cookie(
         key=settings.CSRF_COOKIE_NAME,

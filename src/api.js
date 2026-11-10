@@ -1,10 +1,15 @@
+import { normalizeServerDates } from './utils/time';
+
 /**
  * Reloop Authoritative HTTP API Client
  * Configured for local FastAPI backend at http://127.0.0.1:8000/api
  * Uses HttpOnly session cookies and CSRF headers.
  */
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
+// Use the SAME hostname as the page (localhost vs 127.0.0.1 are different "sites"
+// and the browser drops the SameSite=Lax session cookie across them).
+const DEFAULT_HOST = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || `http://${DEFAULT_HOST}:8000/api`;
 
 function getCookie(name) {
   const value = `; ${document.cookie}`;
@@ -38,7 +43,8 @@ async function request(endpoint, options = {}) {
   const contentType = response.headers.get('content-type') || '';
   let data = null;
   if (contentType.includes('application/json')) {
-    data = await response.json();
+    // Backend timestamps are UTC without a "Z"; make them unambiguous.
+    data = normalizeServerDates(await response.json());
   } else {
     data = await response.text();
   }
@@ -69,12 +75,12 @@ export const api = {
   auth: {
     register: (payload) => request('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
     login: (payload) => request('/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
+    verifyOtp: (payload) => request('/auth/verify-otp', { method: 'POST', body: JSON.stringify(payload) }), // <-- ADD THIS
     logout: () => request('/auth/logout', { method: 'POST' }),
     getMe: () => request('/auth/me'),
     updateProfile: (payload) => request('/auth/me', { method: 'PUT', body: JSON.stringify(payload) }),
     getCsrf: () => request('/auth/csrf'),
   },
-
   // Listings
   listings: {
     getAll: (params = {}) => {
@@ -91,6 +97,7 @@ export const api = {
     create: (payload) => request('/listings', { method: 'POST', body: JSON.stringify(payload) }),
     update: (id, payload) => request(`/listings/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
     deactivate: (id) => request(`/listings/${id}/deactivate`, { method: 'POST' }),
+    buyNow: (id) => request(`/listings/${id}/buy-now`, { method: 'POST' }),
   },
 
   // Bids & Winner Selection
@@ -145,6 +152,7 @@ export const api = {
       request(`/transactions/${id}/confirm-handover`, {
         method: 'POST',
       }),
+    cancel: (id) => request(`/transactions/${id}/cancel`, { method: 'POST' }),
   },
 
   // User Dashboards

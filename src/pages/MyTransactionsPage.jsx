@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import CompletionVideo from '../components/CompletionVideo';
 import { useAuth } from '../context/AuthContext';
 import { useMockData } from '../context/MockDataContext';
 import { api } from '../api';
@@ -18,7 +19,7 @@ import {
 
 export default function MyTransactionsPage({ onNavigate, onOpenAuth }) {
   const { currentUser, isMockMode } = useAuth();
-  const { mockApi } = useMockData();
+  const { mockApi, transactions: mockTransactions } = useMockData();
 
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,29 +31,64 @@ export default function MyTransactionsPage({ onNavigate, onOpenAuth }) {
   const [venue, setVenue] = useState('');
   const [notes, setNotes] = useState('');
 
-  const fetchTransactions = async () => {
+  // silent = background refresh (no spinner)
+  const fetchTransactions = async ({ silent = false } = {}) => {
     if (!currentUser) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (isMockMode) {
+      setLoading(false); // demo data is read live from context (see txList below)
+      return;
+    }
+    if (!silent) setLoading(true);
     try {
-      let data;
-      if (isMockMode) {
-        data = await mockApi.getMyTransactions(currentUser);
-      } else {
-        data = await api.dashboard.getMyTransactions();
-      }
+      const data = await api.dashboard.getMyTransactions();
       setTransactions(data);
     } catch (err) {
-      setError(err.message || 'Failed to load transactions');
+      if (!silent) setError(err.message || 'Failed to load transactions');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchTransactions();
+  }, [currentUser, isMockMode]);
+
+  // Demo mode reads the live shared state, so every payment / delivery / receipt step shows instantly.
+  const txList = useMemo(
+    () =>
+      isMockMode
+        ? (mockTransactions || []).filter((t) => currentUser && (t.seller_id === currentUser.id || t.buyer_id === currentUser.id))
+        : transactions,
+    [isMockMode, mockTransactions, transactions, currentUser]
+  );
+
+  // Play the completion animation the moment an order flips to "completed" while this page is open
+  // (for the buyer who confirms receipt AND for the seller watching the page).
+  const [celebration, setCelebration] = useState(null); // { type: 'delivery' | 'handover', title }
+  const seenStatus = useRef(null);
+  useEffect(() => {
+    const now = new Map(txList.map((t) => [t.id, t.status]));
+    if (seenStatus.current) {
+      for (const t of txList) {
+        const before = seenStatus.current.get(t.id);
+        if (before && before !== 'completed' && t.status === 'completed') {
+          setCelebration({ type: t.fulfilment_type === 'delivery' ? 'delivery' : 'handover', title: t.listing_title });
+        }
+      }
+    }
+    seenStatus.current = now;
+  }, [txList]);
+
+  // Real backend: keep order status fresh (e.g. the seller advanced delivery) without a manual refresh
+  useEffect(() => {
+    if (isMockMode || !currentUser) return;
+    const refresh = () => { if (!document.hidden) fetchTransactions({ silent: true }); };
+    const timer = setInterval(refresh, 10000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
   }, [currentUser, isMockMode]);
 
   const handleSaveVenue = async (txId) => {
@@ -85,26 +121,36 @@ export default function MyTransactionsPage({ onNavigate, onOpenAuth }) {
       } else {
         await api.transactions.confirmHandover(txId);
       }
+      setError(null);
       setActionSuccess('Handover confirmation recorded!');
       await fetchTransactions();
     } catch (err) {
-      alert(err.message || 'Failed to confirm handover');
+      setActionSuccess(null);
+      setError(err.message || 'Failed to confirm handover');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
   const handleFulfilmentAction = async (tx, action) => {
     try {
-      if (isMockMode) return;
       if (action === 'advance') {
-        if (tx.fulfilment_type === 'handover') await api.transactions.advancePickup(tx.id);
+        if (isMockMode) {
+          if (tx.fulfilment_type === 'handover') await mockApi.advancePickup(tx.id, currentUser);
+          else await mockApi.advanceDelivery(tx.id, currentUser);
+        } else if (tx.fulfilment_type === 'handover') await api.transactions.advancePickup(tx.id);
         else await api.transactions.advanceDelivery(tx.id);
+      } else if (isMockMode) {
+        await mockApi.confirmReceipt(tx.id, currentUser);
       } else {
         await api.transactions.confirmReceipt(tx.id);
       }
+      setError(null);
       setActionSuccess(action === 'advance' ? 'Order status updated.' : 'Receipt confirmed. Order complete!');
       await fetchTransactions();
     } catch (err) {
+      setActionSuccess(null);
       setError(err.message || 'Unable to update order');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -136,8 +182,7 @@ export default function MyTransactionsPage({ onNavigate, onOpenAuth }) {
       </div>
 
       {actionSuccess && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3 text-xs text-emerald-800">
-          <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/70 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">          <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
           <span>{actionSuccess}</span>
         </div>
       )}
@@ -151,7 +196,7 @@ export default function MyTransactionsPage({ onNavigate, onOpenAuth }) {
 
       {loading ? (
         <div className="py-16 text-center text-xs text-slate-400">Loading your transactions...</div>
-      ) : transactions.length === 0 ? (
+      ) : txList.length === 0 ? (
         <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center text-slate-500 space-y-3">
           <Handshake className="w-12 h-12 mx-auto text-slate-300" />
           <h3 className="font-bold text-slate-800">No active handover transactions</h3>
@@ -167,7 +212,7 @@ export default function MyTransactionsPage({ onNavigate, onOpenAuth }) {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6">
-          {transactions.map((tx) => {
+          {txList.map((tx) => {
             const isSeller = tx.seller_id === currentUser.id;
             const isBuyer = tx.buyer_id === currentUser.id;
             const hasMyConfirmation = isSeller ? tx.seller_confirmed : tx.buyer_confirmed;
@@ -208,7 +253,17 @@ export default function MyTransactionsPage({ onNavigate, onOpenAuth }) {
                   {tx.payment_status === 'paid_demo' && isBuyer && ['delivered', 'awaiting_receipt'].includes(tx.fulfilment_status) && <button onClick={() => handleFulfilmentAction(tx, 'receipt')} className="rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white">Confirm receipt</button>}
                   {tx.fulfilment_type === 'delivery' && <p className="text-amber-700">Simulated delivery only. No courier is connected.</p>}
                   {tx.timeline?.length > 0 && <ol className="list-inside list-decimal space-y-1 pt-2 text-slate-600">{tx.timeline.map((event, index) => <li key={`${tx.id}-${index}`}>{event.message} <span className="text-slate-400">({formatDateTime(event.created_at)})</span></li>)}</ol>}
-                  {tx.status === 'completed' && <p className="font-bold text-emerald-700">Order Received Successfully!</p>}
+                  {tx.status === 'completed' && (
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <p className="font-bold text-emerald-700">Order Received Successfully!</p>
+                      <button
+                        onClick={() => setCelebration({ type: tx.fulfilment_type === 'delivery' ? 'delivery' : 'handover', title: tx.listing_title })}
+                        className="text-xs font-bold text-emerald-700 hover:underline cursor-pointer"
+                      >
+                        ▶ Watch completion animation
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Handover Details & Coordination */}
@@ -315,29 +370,70 @@ export default function MyTransactionsPage({ onNavigate, onOpenAuth }) {
                     </div>
                   </div>
 
-                  {/* Confirmation Action Button */}
-                  {tx.status !== 'completed' && (
-                    <div className="pt-2 flex justify-end">
-                      {hasMyConfirmation ? (
-                        <div className="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
-                          <CheckCircle className="w-4 h-4" />
-                          You have confirmed this handover. Waiting for the other party.
-                        </div>
-                      ) : (
+                  {/* Step guide + confirmation button: shows exactly what is needed next */}
+                  {tx.status !== 'completed' && (() => {
+                    const paid = tx.payment_status === 'paid_demo';
+                    const isPickup = tx.fulfilment_type === 'handover';
+                    const ready = tx.fulfilment_status === 'awaiting_receipt';
+                    let hint = '';
+                    let action = null;
+
+                    if (!paid) {
+                      if (isBuyer) {
+                        hint = 'Step 1 of 4: the buyer must complete checkout (simulated payment) before handover can start.';
+                        action = (
+                          <button
+                            onClick={() => onNavigate('checkout', tx.id)}
+                            className="px-5 py-2.5 bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
+                          >
+                            Go to Checkout & Pay
+                          </button>
+                        );
+                      } else {
+                        hint = 'Step 1 of 4: waiting for the buyer to complete checkout.';
+                      }
+                    } else if (!isPickup) {
+                      hint = 'This order uses simulated delivery. Use the delivery / receipt buttons above.';
+                    } else if (!tx.handover_venue) {
+                      hint = 'Step 2 of 4: agree on a campus meetup point (use the venue button above).';
+                    } else if (!ready) {
+                      hint = isSeller
+                        ? 'Step 3 of 4: click "Mark item ready for handover" above.'
+                        : 'Step 3 of 4: waiting for the seller to mark the item ready.';
+                    } else if (hasMyConfirmation) {
+                      hint = 'You have confirmed. Waiting for the other party.';
+                    } else {
+                      hint = 'Step 4 of 4: meet in person, check the item, then confirm.';
+                      action = (
                         <button
                           onClick={() => handleConfirmHandover(tx.id)}
                           className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-md cursor-pointer transition-colors"
                         >
                           I have met in person & confirm handover
                         </button>
-                      )}
-                    </div>
-                  )}
+                      );
+                    }
+
+                    return (
+                      <div className="pt-2 flex items-center justify-between gap-3 flex-wrap">
+                        <p className="text-xs text-amber-200 font-medium">{hint}</p>
+                        {action}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             );
           })}
         </div>
+      )}
+
+      {celebration && (
+        <CompletionVideo
+          type={celebration.type}
+          itemTitle={celebration.title}
+          onClose={() => setCelebration(null)}
+        />
       )}
 
       {/* Edit Meetup Venue Modal */}

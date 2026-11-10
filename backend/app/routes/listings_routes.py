@@ -40,6 +40,15 @@ def create_listing(
     if starting_price_paise <= 0 or min_increment_paise <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Prices must be positive numbers.")
 
+    buy_now_price_paise = None
+    if data.buy_now_price_rupees is not None:
+        buy_now_price_paise = int(round(data.buy_now_price_rupees * 100))
+        if buy_now_price_paise < starting_price_paise:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Buy Now price cannot be lower than the starting bid.",
+            )
+
     created = now_utc()
     ends = created + (timedelta(minutes=data.demo_duration_minutes) if data.demo_duration_minutes else timedelta(hours=data.duration_hours))
 
@@ -53,6 +62,7 @@ def create_listing(
         min_increment_paise=min_increment_paise,
         duration_hours=data.duration_hours,
         image_url=data.image_url.strip() if data.image_url else None,
+        buy_now_price_paise=buy_now_price_paise,
         status="active",
         created_at=created,
         ends_at=ends,
@@ -118,6 +128,8 @@ def get_listing_detail(
     if not listing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Listing not found.")
 
+    from app.services.auction_service import expire_stale_transactions
+    expire_stale_transactions(db, listing)
     sync_listing_status(db, listing)
     base_resp = format_listing_response(db, listing)
 
@@ -171,6 +183,19 @@ def update_listing(
     db.commit()
     db.refresh(listing)
     return format_listing_response(db, listing)
+
+
+@router.post("/{listing_id}/buy-now", dependencies=[Depends(verify_csrf)])
+def execute_buy_now(
+    listing_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.services.bidding_service import buy_now
+    from app.services.auction_service import format_transaction_response
+    
+    tx = buy_now(db, listing_id, current_user)
+    return format_transaction_response(tx)
 
 
 @router.post("/{listing_id}/deactivate", response_model=ListingResponse, dependencies=[Depends(verify_csrf)])

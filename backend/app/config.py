@@ -29,7 +29,8 @@ class Settings(BaseSettings):
     COOKIE_SAMESITE: str = "lax"
     
     # Bidding and Seller Selection Rules
-    SELECTION_EXPIRY_HOURS: int = 24  # Selected bidder has 24 hours to accept/decline
+    SELECTION_EXPIRY_HOURS: int = 24  # Time for buyer to ACCEPT the offer
+    CHECKOUT_EXPIRY_HOURS: int = 2    # Time for buyer to PAY after accepting
     
     # Allowed CORS Origins for local frontend
     CORS_ORIGINS: list[str] = [

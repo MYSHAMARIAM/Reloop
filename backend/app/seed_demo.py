@@ -80,6 +80,7 @@ def seed():
                 condition="like_new",
                 starting_price_paise=350000,  # ₹3500
                 min_increment_paise=10000,    # ₹100
+                buy_now_price_paise=550000,  # ₹5500 Buy Now
                 duration_hours=48,
                 image_url="https://images.unsplash.com/photo-1594980596870-8aa52a78d8cd?w=800&auto=format&fit=crop&q=80",
                 status="active",
@@ -130,6 +131,7 @@ def seed():
                 condition="like_new",
                 starting_price_paise=180000,  # ₹1800
                 min_increment_paise=10000,    # ₹100
+                buy_now_price_paise=300000,  # ₹3000 Buy Now
                 duration_hours=24,
                 image_url="https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=800&auto=format&fit=crop&q=80",
                 status="active",
@@ -144,7 +146,7 @@ def seed():
             l4 = Listing(
                 seller_id=u_rohit.id,
                 title="Raspberry Pi 4 Model B (4GB RAM) with Aluminium Heatsink Case",
-                description="Bidding has concluded! Used for a final year IoT capstone project. Includes 32GB SanDisk Extreme MicroSD card pre-imaged with Raspberry Pi OS and 5V 3A USB-C official power adapter.",
+                description="This auction has concluded! Used for a final year IoT capstone project. Includes 32GB SanDisk Extreme MicroSD card pre-imaged with Raspberry Pi OS and 5V 3A USB-C official power adapter.",
                 category="electronics",
                 condition="good",
                 starting_price_paise=280000,  # ₹2800

@@ -67,6 +67,9 @@ const INITIAL_MOCK_LISTINGS = [
     current_highest_bid_rupees: 3800.0,
     next_minimum_bid_paise: 390000,
     next_minimum_bid_rupees: 3900.0,
+    buy_now_price_paise: 550000,
+    buy_now_price_rupees: 5500.0,
+    has_buy_now: true,
     bid_count: 3,
     duration_hours: 48,
     image_url: 'https://images.unsplash.com/photo-1594980596870-8aa52a78d8cd?w=800&auto=format&fit=crop&q=80',
@@ -119,6 +122,9 @@ const INITIAL_MOCK_LISTINGS = [
     current_highest_bid_rupees: null,
     next_minimum_bid_paise: 180000,
     next_minimum_bid_rupees: 1800.0,
+    buy_now_price_paise: 300000,
+    buy_now_price_rupees: 3000.0,
+    has_buy_now: true,
     bid_count: 0,
     duration_hours: 24,
     image_url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=800&auto=format&fit=crop&q=80',
@@ -134,7 +140,7 @@ const INITIAL_MOCK_LISTINGS = [
     seller_name: 'Rohit Verma',
     seller_location: 'Hostel 7, Room 102',
     title: 'Raspberry Pi 4 Model B (4GB RAM) with Aluminium Heatsink Case',
-    description: 'Bidding has concluded! Used for a final year IoT capstone project. Includes 32GB SanDisk Extreme MicroSD card pre-imaged with Raspberry Pi OS and 5V 3A USB-C official power adapter.',
+    description: 'This auction has concluded! Used for a final year IoT capstone project. Includes 32GB SanDisk Extreme MicroSD card pre-imaged with Raspberry Pi OS and 5V 3A USB-C official power adapter.',
     category: 'electronics',
     condition: 'good',
     starting_price_paise: 280000,
@@ -228,15 +234,56 @@ const INITIAL_MOCK_TRANSACTIONS = [
     final_amount_paise: 95000,
     final_amount_rupees: 950.0,
     status: 'handover_arranged',
+    payment_status: 'paid_demo',
+    payment_reference: 'DEMO-SEED00000001',
+    fulfilment_type: 'handover',
+    fulfilment_status: 'awaiting_receipt',
+    delivery_address: null,
+    timeline: [
+      { status: 'order_confirmed', message: 'Demo payment successful (DEMO-SEED00000001); order confirmed.', created_at: new Date(Date.now() - 3600000 * 23).toISOString() },
+      { status: 'awaiting_receipt', message: 'Seller marked the item ready for nearby handover.', created_at: new Date(Date.now() - 3600000 * 5).toISOString() },
+    ],
     handover_venue: 'Central Library Lawn, Table 3',
     handover_notes: 'Meet at 4:30 PM after Digital Circuits lab.',
     scheduled_meetup_at: new Date(Date.now() + 3600000 * 4).toISOString(),
-    seller_confirmed: false,
-    buyer_confirmed: true,
+    seller_confirmed: true,
+    buyer_confirmed: false,
     created_at: new Date(Date.now() - 3600000 * 24).toISOString(),
     completed_at: null,
   },
 ];
+
+const DELIVERY_STEPS = ['order_confirmed', 'dispatched', 'in_transit', 'out_for_delivery', 'delivered'];
+
+// A fresh reserved order: unpaid, waiting for the buyer to check out
+function newReservedTransaction(fields) {
+  const now = new Date().toISOString();
+  return {
+    payment_status: 'unpaid',
+    payment_reference: null,
+    fulfilment_type: null,
+    fulfilment_status: 'awaiting_payment',
+    delivery_address: null,
+    handover_venue: null,
+    handover_notes: null,
+    scheduled_meetup_at: null,
+    seller_confirmed: false,
+    buyer_confirmed: false,
+    created_at: now,
+    completed_at: null,
+    expires_at: new Date(Date.now() + 2 * 3600000).toISOString(), // 2 h to pay, like the backend
+    timeline: [{ status: 'awaiting_payment', message: 'Item reserved. Waiting for checkout.', created_at: now }],
+    status: 'reserved',
+    ...fields,
+  };
+}
+
+function addTxEvent(tx, message) {
+  return {
+    ...tx,
+    timeline: [...(tx.timeline || []), { status: tx.fulfilment_status, message, created_at: new Date().toISOString() }],
+  };
+}
 
 export function MockDataProvider({ children }) {
   const [users, setUsers] = useState(() => {
@@ -297,6 +344,9 @@ export function MockDataProvider({ children }) {
     localStorage.removeItem('reloop_mock_selections');
     localStorage.removeItem('reloop_mock_transactions');
   };
+
+  const replaceTransaction = (updated) =>
+    setTransactions(prev => prev.map(t => (t.id === updated.id ? updated : t)));
 
   // Mock API methods
   const mockApi = {
@@ -371,6 +421,9 @@ export function MockDataProvider({ children }) {
         min_increment_paise: Math.round(payload.min_increment_rupees * 100),
         starting_price_rupees: payload.starting_price_rupees,
         min_increment_rupees: payload.min_increment_rupees,
+        buy_now_price_paise: payload.buy_now_price_rupees ? Math.round(payload.buy_now_price_rupees * 100) : null,
+        buy_now_price_rupees: payload.buy_now_price_rupees || null,
+        has_buy_now: !!payload.buy_now_price_rupees,
         current_highest_bid_paise: null,
         current_highest_bid_rupees: null,
         next_minimum_bid_paise: Math.round(payload.starting_price_rupees * 100),
@@ -396,11 +449,11 @@ export function MockDataProvider({ children }) {
       if (!listing) return Promise.reject(new Error('Listing not found.'));
 
       if (listing.seller_id === currentUser.id) {
-        return Promise.reject(new Error('Sellers are prohibited from bidding on their own listings.'));
+        return Promise.reject(new Error('Sellers cannot place bids on their own listings.'));
       }
 
       if (listing.status !== 'active' || new Date(listing.ends_at) <= new Date()) {
-        return Promise.reject(new Error('Bidding deadline has passed or auction is closed.'));
+        return Promise.reject(new Error('This auction has closed.'));
       }
 
       const nextMin = calculateNextMinimumBid(
@@ -475,6 +528,27 @@ export function MockDataProvider({ children }) {
       return Promise.resolve(newSelection);
     },
 
+    buyNow: (listingId, currentUser) => {
+      const listing = listings.find(l => l.id === Number(listingId));
+      if (!listing || !listing.buy_now_price_paise) return Promise.reject(new Error('Buy Now is not available for this listing.'));
+      if (listing.status !== 'active') return Promise.reject(new Error('This item is no longer available.'));
+      if (listing.seller_id === currentUser.id) return Promise.reject(new Error('You cannot buy your own item.'));
+      const newTx = newReservedTransaction({
+        id: Date.now(),
+        listing_id: listing.id,
+        listing_title: listing.title,
+        seller_id: listing.seller_id,
+        seller_name: listing.seller_name,
+        buyer_id: currentUser.id,
+        buyer_name: currentUser.display_name,
+        final_amount_paise: listing.buy_now_price_paise,
+        final_amount_rupees: listing.buy_now_price_paise / 100,
+      });
+      setListings(prev => prev.map(l => l.id === listing.id ? { ...l, status: 'reserved' } : l));
+      setTransactions(prev => [newTx, ...prev]);
+      return Promise.resolve(newTx);
+    },
+
     respondToSelection: (selectionId, action, currentUser) => {
       const sel = selections.find(s => s.id === Number(selectionId));
       if (!sel) return Promise.reject(new Error('Selection offer not found.'));
@@ -495,7 +569,7 @@ export function MockDataProvider({ children }) {
 
         // Create transaction
         const targetListing = listings.find(l => l.id === sel.listing_id);
-        const newTx = {
+        const newTx = newReservedTransaction({
           id: Date.now(),
           listing_id: sel.listing_id,
           listing_title: targetListing ? targetListing.title : 'Item',
@@ -505,67 +579,176 @@ export function MockDataProvider({ children }) {
           buyer_name: currentUser.display_name,
           final_amount_paise: sel.bid_amount_paise,
           final_amount_rupees: sel.bid_amount_rupees,
-          status: 'reserved',
-          handover_venue: null,
-          handover_notes: null,
-          scheduled_meetup_at: null,
-          seller_confirmed: false,
-          buyer_confirmed: false,
-          created_at: nowIso,
-          completed_at: null,
-        };
+        });
 
         setTransactions(prev => [newTx, ...prev]);
-        return Promise.resolve({ message: 'Offer accepted! Item is reserved. You can now coordinate handover.' });
+        return Promise.resolve({
+          message: 'Offer accepted! Item is reserved. You can now proceed to checkout.',
+          transaction_id: newTx.id,
+          transaction: newTx,
+        });
       }
     },
 
     arrangeHandover: (txId, { handover_venue, handover_notes, scheduled_meetup_at }) => {
-      setTransactions(prev => prev.map(t => {
-        if (t.id === Number(txId)) {
-          return {
-            ...t,
-            handover_venue,
-            handover_notes,
-            scheduled_meetup_at,
-            status: t.status === 'reserved' ? 'handover_arranged' : t.status,
-          };
-        }
-        return t;
-      }));
-      return Promise.resolve({ message: 'Handover details updated.' });
+      const tx = transactions.find(t => t.id === Number(txId));
+      if (!tx) return Promise.reject(new Error('Transaction not found.'));
+      if (tx.status === 'completed') return Promise.reject(new Error('This transaction is already completed.'));
+      if (tx.payment_status !== 'paid_demo' || tx.fulfilment_type !== 'handover') {
+        return Promise.reject(new Error('Complete simulated checkout and choose nearby handover first.'));
+      }
+      if (tx.fulfilment_status !== 'order_confirmed') {
+        return Promise.reject(new Error('Handover details cannot change after the seller marks the item ready.'));
+      }
+      let updated = {
+        ...tx,
+        handover_venue,
+        handover_notes,
+        scheduled_meetup_at: scheduled_meetup_at || tx.scheduled_meetup_at,
+        status: tx.status === 'reserved' ? 'handover_arranged' : tx.status,
+      };
+      updated = addTxEvent(updated, `Nearby handover point agreed: ${String(handover_venue).trim()}.`);
+      replaceTransaction(updated);
+      return Promise.resolve(updated);
     },
 
     confirmHandover: (txId, currentUser) => {
-      let isFullyCompleted = false;
-      let targetListingId = null;
-
-      setTransactions(prev => prev.map(t => {
-        if (t.id === Number(txId)) {
-          targetListingId = t.listing_id;
-          const isSeller = t.seller_id === currentUser.id;
-          const isBuyer = t.buyer_id === currentUser.id;
-
-          const sellerConf = isSeller ? true : t.seller_confirmed;
-          const buyerConf = isBuyer ? true : t.buyer_confirmed;
-          isFullyCompleted = sellerConf && buyerConf;
-
-          return {
-            ...t,
-            seller_confirmed: sellerConf,
-            buyer_confirmed: buyerConf,
-            status: isFullyCompleted ? 'completed' : t.status,
-            completed_at: isFullyCompleted ? new Date().toISOString() : null,
-          };
-        }
-        return t;
-      }));
-
-      if (isFullyCompleted && targetListingId) {
-        setListings(prev => prev.map(l => l.id === targetListingId ? { ...l, status: 'sold' } : l));
+      const tx = transactions.find(t => t.id === Number(txId));
+      if (!tx) return Promise.reject(new Error('Transaction not found.'));
+      if (tx.status === 'completed') return Promise.reject(new Error('Handover has already been fully confirmed and completed.'));
+      if (tx.payment_status !== 'paid_demo' || tx.fulfilment_type !== 'handover' || tx.fulfilment_status !== 'awaiting_receipt') {
+        return Promise.reject(new Error('The seller must mark this paid item ready before handover confirmation.'));
       }
+      const isSeller = tx.seller_id === currentUser.id;
+      const isBuyer = tx.buyer_id === currentUser.id;
+      const sellerConf = isSeller ? true : tx.seller_confirmed;
+      const buyerConf = isBuyer ? true : tx.buyer_confirmed;
+      const done = sellerConf && buyerConf;
+      let updated = {
+        ...tx,
+        seller_confirmed: sellerConf,
+        buyer_confirmed: buyerConf,
+        status: done ? 'completed' : tx.status,
+        fulfilment_status: done ? 'completed' : tx.fulfilment_status,
+        completed_at: done ? new Date().toISOString() : tx.completed_at,
+      };
+      updated = addTxEvent(updated, `${isSeller ? 'Seller' : 'Buyer'} confirmed handover.`);
+      replaceTransaction(updated);
+      if (done) setListings(prev => prev.map(l => (l.id === tx.listing_id ? { ...l, status: 'sold' } : l)));
+      return Promise.resolve(updated);
+    },
 
-      return Promise.resolve({ message: 'Handover confirmation recorded.' });
+    // ---- Payment, delivery & receipt (mirrors backend/app/routes/transactions_routes.py) ----
+    simulatePayment: (txId, payload, currentUser) => {
+      const tx = transactions.find(t => t.id === Number(txId));
+      if (!tx) return Promise.reject(new Error('Transaction not found.'));
+      if (currentUser.id !== tx.buyer_id) return Promise.reject(new Error('Only the selected buyer can pay for this order.'));
+      if (tx.payment_status === 'paid_demo') return Promise.reject(new Error('This order has already been paid successfully.'));
+      if (tx.status !== 'reserved') return Promise.reject(new Error('This order is not available for checkout.'));
+      if (payload.fulfilment_type === 'delivery' && !(payload.delivery_address || '').trim()) {
+        return Promise.reject(new Error('Enter a delivery address for simulated delivery.'));
+      }
+      if (payload.fulfilment_type === 'handover' && !(payload.handover_venue || '').trim()) {
+        return Promise.reject(new Error('Choose a mutually agreed public meeting point.'));
+      }
+      const ok = payload.simulation_result === 'success';
+      const ref = `DEMO-${Math.random().toString(36).slice(2, 14).toUpperCase()}`;
+      const isHandover = payload.fulfilment_type === 'handover';
+      let updated = {
+        ...tx,
+        fulfilment_type: payload.fulfilment_type,
+        delivery_address: payload.delivery_address ? payload.delivery_address.trim() : null,
+        handover_venue: isHandover ? payload.handover_venue.trim() : null,
+      };
+      if (ok) {
+        updated = {
+          ...updated,
+          payment_status: 'paid_demo',
+          payment_reference: ref,
+          fulfilment_status: 'order_confirmed',
+          status: isHandover ? 'handover_arranged' : tx.status,
+        };
+        updated = addTxEvent(updated, `Demo payment successful (${ref}); order confirmed.`);
+      } else {
+        updated = { ...updated, payment_status: 'failed_demo' };
+        updated = addTxEvent(updated, `Demo payment failed (${ref}); retry is available.`);
+      }
+      replaceTransaction(updated);
+      return Promise.resolve(updated);
+    },
+
+    advanceDelivery: (txId, currentUser) => {
+      const tx = transactions.find(t => t.id === Number(txId));
+      if (!tx) return Promise.reject(new Error('Transaction not found.'));
+      if (currentUser.id !== tx.seller_id) return Promise.reject(new Error('Only the seller can advance simulated delivery.'));
+      if (tx.payment_status !== 'paid_demo' || tx.fulfilment_type !== 'delivery') {
+        return Promise.reject(new Error('A successfully paid delivery order is required.'));
+      }
+      if (tx.fulfilment_status === 'delivered') return Promise.reject(new Error('Delivery is awaiting buyer receipt confirmation.'));
+      const i = DELIVERY_STEPS.indexOf(tx.fulfilment_status);
+      if (i < 0 || i >= DELIVERY_STEPS.length - 1) return Promise.reject(new Error('Delivery cannot advance from the current status.'));
+      const next = DELIVERY_STEPS[i + 1];
+      let updated = { ...tx, fulfilment_status: next, seller_confirmed: next === 'delivered' ? true : tx.seller_confirmed };
+      updated = addTxEvent(updated, `Simulated delivery status: ${next.replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}.`);
+      replaceTransaction(updated);
+      return Promise.resolve(updated);
+    },
+
+    advancePickup: (txId, currentUser) => {
+      const tx = transactions.find(t => t.id === Number(txId));
+      if (!tx) return Promise.reject(new Error('Transaction not found.'));
+      if (currentUser.id !== tx.seller_id) return Promise.reject(new Error('Only the seller can mark the item ready for handover.'));
+      if (tx.payment_status !== 'paid_demo' || tx.fulfilment_type !== 'handover' || !tx.handover_venue) {
+        return Promise.reject(new Error('A paid order with an agreed handover point is required.'));
+      }
+      if (tx.fulfilment_status !== 'order_confirmed') return Promise.reject(new Error('Item cannot be marked ready in its current state.'));
+      let updated = { ...tx, fulfilment_status: 'awaiting_receipt', seller_confirmed: true };
+      updated = addTxEvent(updated, 'Seller marked the item ready for nearby handover.');
+      replaceTransaction(updated);
+      return Promise.resolve(updated);
+    },
+
+    confirmReceipt: (txId, currentUser) => {
+      const tx = transactions.find(t => t.id === Number(txId));
+      if (!tx) return Promise.reject(new Error('Transaction not found.'));
+      if (currentUser.id !== tx.buyer_id) return Promise.reject(new Error('Only the buyer can confirm receipt.'));
+      const allowed =
+        (tx.fulfilment_type === 'delivery' && tx.fulfilment_status === 'delivered') ||
+        (tx.fulfilment_type === 'handover' && tx.fulfilment_status === 'awaiting_receipt');
+      if (tx.payment_status !== 'paid_demo' || !allowed) {
+        return Promise.reject(new Error('The order is not ready for receipt confirmation.'));
+      }
+      let updated = {
+        ...tx,
+        buyer_confirmed: true,
+        fulfilment_status: 'completed',
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+      };
+      updated = addTxEvent(updated, 'Buyer confirmed receipt. Order completed.');
+      replaceTransaction(updated);
+      setListings(prev => prev.map(l => (l.id === tx.listing_id ? { ...l, status: 'sold' } : l)));
+      return Promise.resolve(updated);
+    },
+
+    cancelReservation: (txId, currentUser) => {
+      const tx = transactions.find(t => t.id === Number(txId));
+      if (!tx) return Promise.reject(new Error('Transaction not found.'));
+      if (tx.status === 'completed' || tx.payment_status === 'paid_demo') {
+        return Promise.reject(new Error('Cannot cancel a reservation that has already been paid or completed.'));
+      }
+      if (currentUser.id !== tx.buyer_id) return Promise.reject(new Error('Only the selected buyer can cancel this reservation.'));
+      if (tx.status === 'cancelled') return Promise.reject(new Error('This transaction is already cancelled.'));
+      let updated = { ...tx, status: 'cancelled', fulfilment_status: 'cancelled' };
+      updated = addTxEvent(updated, 'Buyer cancelled the reservation. Item released back to seller.');
+      replaceTransaction(updated);
+      setListings(prev => prev.map(l => {
+        if (l.id === tx.listing_id && (l.status === 'reserved' || l.status === 'sold')) {
+          return { ...l, status: new Date(l.ends_at) > new Date() ? 'active' : 'bidding_ended' };
+        }
+        return l;
+      }));
+      return Promise.resolve(updated);
     },
 
     getMyListings: (currentUser) => {
@@ -628,9 +811,24 @@ export function MockDataProvider({ children }) {
         }
       });
 
+      const myListingIds = new Set(myListings.map(l => l.id));
+      const myListingBids = bids.filter(b => myListingIds.has(b.listing_id));
+      const recentBids = [...myListingBids]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 8)
+        .map(b => ({
+          id: b.id,
+          listing_id: b.listing_id,
+          listing_title: (myListings.find(l => l.id === b.listing_id) || {}).title || 'Item',
+          bidder_name: b.bidder_name,
+          amount_rupees: b.amount_rupees,
+          created_at: b.created_at,
+        }));
+
       return Promise.resolve({
         summary: {
           total_listings: myListings.length,
+          total_bids: myListingBids.length,
           active_count: active.length,
           awaiting_decision_count: awaitingDecision.length,
           pending_response_count: pendingResponses.length,
@@ -644,6 +842,7 @@ export function MockDataProvider({ children }) {
         reserved_items: reserved,
         completed_sales: completed,
         unsold_auctions: unsold,
+        recent_bids: recentBids,
       });
     },
 

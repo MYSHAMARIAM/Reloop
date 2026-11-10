@@ -3,8 +3,13 @@ import { useAuth } from '../context/AuthContext';
 import { useMockData } from '../context/MockDataContext';
 import { api } from '../api';
 import { formatRupees } from '../utils/currency';
+import { formatClockParts, timeAgo } from '../utils/time';
+import { useNow } from '../hooks/useNow';
 import StatusBadge from '../components/StatusBadge';
+import CountdownTimer from '../components/CountdownTimer';
 import {
+  Zap,
+  Activity,
   LayoutDashboard,
   Clock,
   CheckCircle,
@@ -17,19 +22,22 @@ import {
 
 export default function SellerDashboardPage({ onNavigate, onSelectListing, onOpenAuth }) {
   const { currentUser, isMockMode } = useAuth();
-  const { mockApi } = useMockData();
+  const { mockApi, listings: mockListings, bids: mockBids, selections: mockSelections, transactions: mockTransactions } = useMockData();
+  const now = useNow(30000); // keeps "5 min ago" labels fresh
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const [activeTab, setActiveTab] = useState('decision'); // 'decision', 'active', 'pending', 'reserved', 'completed', 'unsold'
 
-  const fetchOverview = async () => {
+  // silent = background refresh: no spinner, no tab switching, errors don't wipe the screen
+  const fetchOverview = async ({ silent = false } = {}) => {
     if (!currentUser) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       let res;
       if (isMockMode) {
@@ -38,20 +46,60 @@ export default function SellerDashboardPage({ onNavigate, onSelectListing, onOpe
         res = await api.dashboard.getSellerOverview();
       }
       setData(res);
-      // Auto pick tab that has urgent items
-      if (res.ended_awaiting_decision?.length > 0) setActiveTab('decision');
-      else if (res.pending_bidder_responses?.length > 0) setActiveTab('pending');
-      else if (res.active_auctions?.length > 0) setActiveTab('active');
+      setError(null);
+      setLastUpdated(Date.now());
+      if (!silent) {
+        // Auto pick tab that has urgent items
+        if (res.ended_awaiting_decision?.length > 0) setActiveTab('decision');
+        else if (res.pending_bidder_responses?.length > 0) setActiveTab('pending');
+        else if (res.active_auctions?.length > 0) setActiveTab('active');
+      }
     } catch (err) {
-      setError(err.message || 'Failed to load seller dashboard');
+      if (!silent) setError(err.message || 'Failed to load seller dashboard');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
+  // First load / user switch
   useEffect(() => {
     fetchOverview();
   }, [currentUser, isMockMode]);
+
+  // LIVE: real backend -> poll every 8s while the tab is visible, and refresh on return to the tab
+  useEffect(() => {
+    if (!currentUser || isMockMode) return;
+    const refresh = () => {
+      if (!document.hidden) fetchOverview({ silent: true });
+    };
+    const timer = setInterval(refresh, 8000);
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [currentUser, isMockMode]);
+
+  // LIVE: demo mode -> re-read the moment any bid / listing / offer changes
+  useEffect(() => {
+    if (!currentUser || !isMockMode) return;
+    fetchOverview({ silent: true });
+  }, [mockListings, mockBids, mockSelections, mockTransactions]);
+
+  // When an open auction's timer runs out, refresh so it moves out of "Live" on its own
+  useEffect(() => {
+    if (!currentUser || !data?.active_auctions?.length) return;
+    const ends = data.active_auctions
+      .map((l) => new Date(l.ends_at).getTime())
+      .filter((t) => !isNaN(t));
+    if (ends.length === 0) return;
+    const wait = Math.min(...ends) - Date.now();
+    if (wait > 60 * 60 * 1000) return;
+    const t = setTimeout(() => fetchOverview({ silent: true }), Math.max(wait, 0) + 1500);
+    return () => clearTimeout(t);
+  }, [data]);
 
   if (!currentUser) {
     return (
@@ -70,6 +118,7 @@ export default function SellerDashboardPage({ onNavigate, onSelectListing, onOpe
   }
 
   const summary = data?.summary || {
+    total_bids: 0,
     active_count: 0,
     awaiting_decision_count: 0,
     pending_response_count: 0,
@@ -80,13 +129,30 @@ export default function SellerDashboardPage({ onNavigate, onSelectListing, onOpe
 
   return (
     <div className="space-y-6 pb-20">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-          Seller Control Dashboard
-        </h1>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Review ended auctions, select student winners, and coordinate item handovers
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            Seller Control Dashboard
+          </h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Review ended auctions, select student winners, and coordinate item handovers
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-[11px] text-slate-500">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            LIVE
+          </span>
+          <span className="tabular-nums">
+            {lastUpdated ? `Updated ${formatClockParts(new Date(lastUpdated)).time}` : 'Connecting…'}
+          </span>
+          <button
+            onClick={() => fetchOverview({ silent: true })}
+            className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 font-semibold text-slate-600 cursor-pointer"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -141,7 +207,7 @@ export default function SellerDashboardPage({ onNavigate, onSelectListing, onOpe
           }`}
         >
           <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 block">
-            Active Bidding
+            Live Auctions
           </span>
           <span className="text-2xl font-black text-emerald-900 mt-1 block">
             {summary.active_count}
@@ -199,6 +265,45 @@ export default function SellerDashboardPage({ onNavigate, onSelectListing, onOpe
           </span>
           <span className="text-[10px] text-slate-500">Ended with 0 bids</span>
         </button>
+      </div>
+
+      {/* Live bid activity across all of this seller's auctions */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-emerald-600" />
+            Live Bid Activity
+          </h3>
+          <span className="text-[11px] text-slate-500">
+            <span className="font-bold text-slate-800">{summary.total_bids ?? 0}</span> total bids on your items
+          </span>
+        </div>
+        {(!data?.recent_bids || data.recent_bids.length === 0) ? (
+          <p className="text-xs text-slate-400 py-4 text-center bg-slate-50 rounded-2xl">
+            New bids on your items will appear here the moment they are placed.
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {data.recent_bids.map((b) => (
+              <li key={b.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                <div className="min-w-0">
+                  <span className="font-bold text-slate-900">{b.bidder_name}</span>
+                  <span className="text-slate-500"> placed a bid on </span>
+                  <button
+                    onClick={() => onSelectListing(b.listing_id)}
+                    className="font-semibold text-emerald-700 hover:underline cursor-pointer truncate max-w-[16rem] align-bottom"
+                  >
+                    {b.listing_title}
+                  </button>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="font-extrabold text-slate-900">{formatRupees(b.amount_rupees)}</div>
+                  <div className="text-[10px] text-slate-400">{timeAgo(b.created_at, now)}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {/* Main Tab Content */}
@@ -316,35 +421,55 @@ export default function SellerDashboardPage({ onNavigate, onSelectListing, onOpe
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {data.active_auctions.map((l) => (
-                  <div
-                    key={l.id}
-                    className="p-5 rounded-2xl border border-slate-200 flex flex-col justify-between space-y-3"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <StatusBadge status={l.status} />
-                        <span className="font-semibold text-slate-600">{l.bid_count} bids</span>
+                {data.active_auctions.map((l) => {
+                  const hasBids = l.current_highest_bid_rupees !== null && l.current_highest_bid_rupees !== undefined;
+                  const buyNow = l.buy_now_price_rupees ?? (l.buy_now_price_paise ? l.buy_now_price_paise / 100 : null);
+                  return (
+                    <div
+                      key={l.id}
+                      className="p-5 rounded-2xl border border-slate-200 flex flex-col justify-between space-y-3"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <StatusBadge status={l.status} />
+                          <span className="font-semibold text-slate-600">
+                            {l.bid_count} {l.bid_count === 1 ? 'bid' : 'bids'}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-slate-900 text-base">{l.title}</h4>
+                        <p className="text-xs text-slate-500 mt-1 line-clamp-1">{l.description}</p>
                       </div>
-                      <h4 className="font-bold text-slate-900 text-base">{l.title}</h4>
-                      <p className="text-xs text-slate-500 mt-1 line-clamp-1">{l.description}</p>
-                    </div>
 
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                      <span className="font-extrabold text-slate-900 text-sm">
-                        {l.current_highest_bid_rupees
-                          ? formatRupees(l.current_highest_bid_rupees)
-                          : formatRupees(l.starting_price_rupees)}
-                      </span>
-                      <button
-                        onClick={() => onSelectListing(l.id)}
-                        className="text-xs font-bold text-emerald-700 hover:underline"
-                      >
-                        Inspect Bids →
-                      </button>
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                            {hasBids ? 'Current bid' : 'Starting price'}
+                          </span>
+                          <span className="font-extrabold text-slate-900 text-lg">
+                            {formatRupees(hasBids ? l.current_highest_bid_rupees : l.starting_price_rupees)}
+                          </span>
+                        </div>
+                        <CountdownTimer endsAt={l.ends_at} status={l.status} />
+                      </div>
+
+                      {buyNow ? (
+                        <div className="inline-flex items-center gap-1 self-start text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5">
+                          <Zap className="w-3 h-3" /> Buy Now {formatRupees(buyNow)}
+                        </div>
+                      ) : null}
+
+                      <div className="pt-2 border-t border-slate-100 flex justify-end">
+                        <button
+                          onClick={() => onSelectListing(l.id)}
+                          className="text-xs font-bold text-emerald-700 hover:underline cursor-pointer"
+                        >
+                          Inspect Bids →
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
+
               </div>
             )}
           </div>

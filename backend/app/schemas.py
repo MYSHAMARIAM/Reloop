@@ -70,6 +70,7 @@ class ListingCreate(BaseModel):
     duration_hours: int = Field(..., ge=1, le=168)
     demo_duration_minutes: Optional[int] = Field(None, ge=1, le=30)
     image_url: Optional[str] = Field(None, max_length=500)
+    buy_now_price_rupees: Optional[float] = Field(None, gt=0)
 
     @field_validator("category")
     @classmethod
@@ -123,6 +124,9 @@ class ListingResponse(BaseModel):
     current_highest_bid_rupees: Optional[float] = None
     next_minimum_bid_paise: int
     next_minimum_bid_rupees: float
+    buy_now_price_paise: Optional[int] = None
+    buy_now_price_rupees: Optional[float] = None
+    has_buy_now: bool = False
     bid_count: int
     duration_hours: int
     image_url: Optional[str] = None
@@ -253,3 +257,7 @@ class TransactionResponse(BaseModel):
 
 # Resolve circular references
 ListingDetailResponse.model_rebuild()
+
+class OTPVerifyRequest(BaseModel):
+    email: str
+    code: str

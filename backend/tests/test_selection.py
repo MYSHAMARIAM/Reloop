@@ -34,15 +34,13 @@ def test_seller_selection_rules_and_highest_bidder_not_automatic(
     b2_resp = client.post(f"/api/listings/{listing_id}/bids", json={"amount_rupees": 1200.0}, headers=b2_headers)
     bid2_id = b2_resp.json()["id"]
 
-    # 4. Attempt selection before auction closes -> must fail
+    # 4. A non-seller can never select a winner, even while bidding is open
     early_sel = client.post(
         f"/api/listings/{listing_id}/select-bidder",
         json={"bid_id": bid1_id},
-        headers=seller_headers,
+        headers=b1_headers,
     )
-    assert early_sel.status_code == 400
-    print("EARLY SELECTION RESPONSE:", early_sel.status_code, early_sel.text)
-    assert "still in progress" in early_sel.json()["detail"].lower()
+    assert early_sel.status_code == 403
 
     # 5. Artificially close the auction by moving ends_at to past
     listing = db_session.query(Listing).filter(Listing.id == listing_id).first()

@@ -2,6 +2,7 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useMockData } from '../context/MockDataContext';
 import { Server, Users, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import LiveClock from './LiveClock';
 
 export default function MockBanner() {
   const { isMockMode, toggleMockMode, backendStatus, currentUser, switchDemoUser, availableDemoUsers } = useAuth();
@@ -46,6 +47,7 @@ export default function MockBanner() {
 
         {/* Right: Quick Controls & Demo Persona Switcher */}
         <div className="flex items-center gap-3 flex-wrap">
+          <LiveClock variant="inline" className="2xl:hidden text-slate-300" />
           {/* Demo User Switcher */}
           {isMockMode && availableDemoUsers && (
             <div className="flex items-center gap-1.5 bg-slate-800/80 px-2 py-1 rounded border border-slate-700">

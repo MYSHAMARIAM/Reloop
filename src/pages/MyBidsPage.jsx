@@ -52,10 +52,11 @@ export default function MyBidsPage({ onNavigate, onSelectListing, onOpenAuth }) 
         res = await api.bids.respondToSelection(selectionId, action);
       }
       setActionSuccess(res?.message || `Offer ${action}ed successfully.`);
-      await fetchMyBids();
-      if (action === 'accept' && !isMockMode) {
-        const detail = await api.listings.getById(listingId);
-        if (detail.transaction?.id) onStartCheckout(detail.transaction.id);
+      const txId = res?.transaction_id || res?.transaction?.id;
+      if (action === 'accept' && txId) {
+        onStartCheckout(txId);
+      } else {
+        await fetchMyBids();
       }
     } catch (err) {
       setError(err.message || `Failed to ${action} offer`);

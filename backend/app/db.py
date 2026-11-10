@@ -43,7 +43,11 @@ def init_db():
             "fulfilment_status": "VARCHAR(40) NOT NULL DEFAULT 'awaiting_payment'",
             "delivery_address": "VARCHAR(300)",
         }
+        additions["expires_at"] = "DATETIME"
+        listing_columns = {c["name"] for c in inspect(engine).get_columns("listings")}
         with engine.begin() as connection:
             for name, definition in additions.items():
                 if name not in columns:
                     connection.execute(text(f"ALTER TABLE transactions ADD COLUMN {name} {definition}"))
+            if "buy_now_price_paise" not in listing_columns:
+                connection.execute(text("ALTER TABLE listings ADD COLUMN buy_now_price_paise INTEGER"))

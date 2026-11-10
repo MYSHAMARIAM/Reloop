@@ -51,6 +51,7 @@ class Listing(Base):
     min_increment_paise = Column(Integer, nullable=False)
     duration_hours = Column(Integer, nullable=False)
     image_url = Column(String(500), nullable=True)
+    buy_now_price_paise = Column(Integer, nullable=True)  # optional fixed price
     status = Column(String(30), default="active", nullable=False, index=True)  # 'active', 'bidding_ended', 'reserved', 'sold', 'withdrawn'
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     ends_at = Column(DateTime, nullable=False, index=True)
@@ -146,6 +147,9 @@ class Transaction(Base):
     
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)
+
+    # NEW FIELD: Add this right after completed_at
+    expires_at = Column(DateTime, nullable=True) 
 
     __table_args__ = (
         CheckConstraint("final_amount_paise > 0", name="check_positive_final_amount"),

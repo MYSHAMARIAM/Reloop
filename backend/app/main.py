@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.APP_NAME,
-    description="Backend API for Reloop: College Second-Hand Bidding Marketplace",
+    description="Backend API for Reloop: Campus Auction House",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -34,11 +34,15 @@ app = FastAPI(
 # CORS configuration restricted to local development origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    # We MUST list the exact origins, we cannot use "*" with credentials
+    allow_origins=[
+        "http://localhost:5173", 
+        "http://127.0.0.1:5173",
+        "http://localhost:3000" # Just in case your Vite port is different
+    ], 
+    allow_credentials=True,  # CRITICAL: This tells the browser to accept cookies
+    allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
 
 # Validation exception handler for clean error responses

@@ -15,7 +15,8 @@ export function AuthProvider({ children }) {
 
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('reloop_current_user');
-    return saved ? JSON.parse(saved) : (users && users.length > 0 ? users[0] : null);
+    if (!saved) return null;
+    try { return JSON.parse(saved); } catch { return null; }
   });
 
   const [loading, setLoading] = useState(true);
@@ -72,10 +73,19 @@ export function AuthProvider({ children }) {
       setCurrentUser(found);
       return found;
     } else {
-      const user = await api.auth.login({ email, password });
-      setCurrentUser(user);
-      return user;
+      // Step 1 of 2: password check. Backend replies { require_otp: true } and sets NO cookie yet.
+      const res = await api.auth.login({ email, password });
+      if (res && res.require_otp) return res;
+      setCurrentUser(res);
+      return res;
     }
+  };
+
+  // Step 2 of 2: OTP check. This is what actually sets the session cookie.
+  const verifyOtp = async (email, code) => {
+    const user = await api.auth.verifyOtp({ email, code });
+    setCurrentUser(user);
+    return user;
   };
 
   const register = async (formData) => {
@@ -127,6 +137,7 @@ export function AuthProvider({ children }) {
         backendStatus,
         toggleMockMode,
         login,
+        verifyOtp,
         register,
         logout,
         switchDemoUser,

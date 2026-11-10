@@ -23,6 +23,8 @@ export default function CreateListingPage({ onNavigate, onCreated, onOpenAuth })
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
 
+  const [buyNowPrice, setBuyNowPrice] = useState('');
+
   if (!currentUser) {
     return (
       <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center max-w-md mx-auto space-y-4 shadow-sm my-12">
@@ -60,6 +62,19 @@ export default function CreateListingPage({ onNavigate, onCreated, onOpenAuth })
       return;
     }
 
+    let buyNow = null;
+    if (buyNowPrice.trim() !== '') {
+      buyNow = parseFloat(buyNowPrice);
+      if (isNaN(buyNow) || buyNow <= 0) {
+        setError('Buy Now price must be a positive number');
+        return;
+      }
+      if (buyNow < price) {
+        setError('Buy Now price cannot be lower than the starting bid');
+        return;
+      }
+    }
+
     if (title.trim().length < 3) {
       setError('Title must be at least 3 characters');
       return;
@@ -82,6 +97,7 @@ export default function CreateListingPage({ onNavigate, onCreated, onOpenAuth })
         duration_hours: Number(durationHours),
         ...(demoDurationMinutes ? { demo_duration_minutes: Number(demoDurationMinutes) } : {}),
         image_url: imageUrl.trim() || null,
+        ...(buyNow ? { buy_now_price_rupees: buyNow } : {}),
       };
 
       let newListing;
@@ -107,10 +123,10 @@ export default function CreateListingPage({ onNavigate, onCreated, onOpenAuth })
     <div className="max-w-2xl mx-auto space-y-6 pb-20">
       <div className="space-y-1">
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-          List an Item for Bidding
+          List an Item for Auction
         </h1>
         <p className="text-xs text-slate-500">
-          Set your starting price, increment, and auction duration. After bidding ends, you choose the winner.
+          Set your starting price, increment, and auction duration. After the auction ends, you choose the winner.
         </p>
       </div>
 
@@ -199,8 +215,7 @@ export default function CreateListingPage({ onNavigate, onCreated, onOpenAuth })
         </div>
 
         {/* Pricing & Increment */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/70 p-4 rounded-2xl border border-slate-100">
-          <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/70 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">      <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
               Starting Price (₹ INR) *
             </label>
@@ -241,10 +256,30 @@ export default function CreateListingPage({ onNavigate, onCreated, onOpenAuth })
           </div>
         </div>
 
+        {/* Optional Buy Now price */}
+        <div>
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+            Buy Now Price (₹ INR) <span className="text-slate-400 normal-case font-medium">- optional</span>
+          </label>
+          <div className="relative">
+            <span className="absolute left-3.5 top-2.5 text-slate-400 font-bold">₹</span>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              placeholder="Leave empty for auction only"
+              value={buyNowPrice}
+              onChange={(e) => setBuyNowPrice(e.target.value)}
+              className="w-full pl-8 pr-4 py-2.5 text-sm bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <p className="text-[10px] text-slate-400 mt-1">Buyers can skip the auction and purchase instantly at this price (must be at least the starting price)</p>
+        </div>
+
         {/* Bidding Duration */}
         <div>
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-            Auction Bidding Duration *
+            Auction Duration *
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {DURATION_OPTIONS.map((opt) => (
